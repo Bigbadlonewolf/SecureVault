@@ -1,0 +1,11 @@
+{
+  "finding": {
+    "category": "OPEN_FIREWALL",
+    "severity": "HIGH",
+    "resourceName": "//compute.googleapis.com/projects/my-project/global/firewalls/allow-all-ingress",
+    "sourceProperties": {
+      "Recommendation": "Restrict source ranges to specific IP ranges; avoid 0.0.0.0/0"
+    },
+    "createTime": "2025-06-30T09:22:15Z"
+  }
+}
