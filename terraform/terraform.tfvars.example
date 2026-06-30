@@ -1,0 +1,5 @@
+project_id       = "your-gcp-project-id"
+region           = "us-central1"
+alert_email      = "security-team@example.com"
+alert_from_email = "security-alerts@securevault.dev"
+sendgrid_api_key = "SG.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
