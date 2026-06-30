@@ -1,0 +1,11 @@
+{
+  "finding": {
+    "category": "OVER_PRIVILEGED_SERVICE_ACCOUNT",
+    "severity": "HIGH",
+    "resourceName": "//iam.googleapis.com/projects/my-project/serviceAccounts/data-pipeline@my-project.iam.gserviceaccount.com",
+    "sourceProperties": {
+      "Recommendation": "Replace roles/editor with a custom role containing only required permissions"
+    },
+    "createTime": "2025-06-30T10:05:00Z"
+  }
+}
