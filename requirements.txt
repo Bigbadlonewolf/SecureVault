@@ -1,0 +1,4 @@
+functions-framework==3.*
+cloudevents==1.*
+sendgrid==6.*
+pytest==8.*
