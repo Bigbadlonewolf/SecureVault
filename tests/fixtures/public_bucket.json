@@ -1,0 +1,11 @@
+{
+  "finding": {
+    "category": "PUBLIC_BUCKET_ACL",
+    "severity": "CRITICAL",
+    "resourceName": "//storage.googleapis.com/projects/_/buckets/customer-data-prod",
+    "sourceProperties": {
+      "Recommendation": "Remove allUsers or allAuthenticatedUsers from bucket IAM bindings"
+    },
+    "createTime": "2025-06-30T08:15:30Z"
+  }
+}
