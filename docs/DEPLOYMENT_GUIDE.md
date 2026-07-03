@@ -95,24 +95,16 @@ Review the architecture and context before deploying:
 
 ## Step 3: Store the Brevo API Key in Secret Manager
 
-The Terraform configuration creates a Secret Manager secret called `brevo-api-key`, but the actual key value must be set outside of Terraform and state.
+Terraform creates an empty Secret Manager secret called `brevo-api-key`. The actual key value must be added **after** `terraform apply` so it never enters Terraform state or the repository.
 
-1. Obtain your Brevo API key from the [Brevo dashboard](https://app.brevo.com/).
+1. Run Terraform first (see Step 4) so the secret and IAM bindings exist.
 
-2. Add it as a new Secret Manager version:
+2. Obtain your Brevo API key from the [Brevo dashboard](https://app.brevo.com/).
+
+3. Add the key as the first active Secret Manager version:
 
    ```bash
    echo -n "YOUR_BREVO_API_KEY" | gcloud secrets versions add brevo-api-key --data-file=-
-   ```
-
-3. Disable the placeholder version created by Terraform:
-
-   ```bash
-   # List versions to find the placeholder (usually version 1)
-   gcloud secrets versions list brevo-api-key
-
-   # Disable the placeholder version
-   gcloud secrets versions disable VERSION_NUMBER --secret=brevo-api-key
    ```
 
 4. Verify the function service account can access the secret:
@@ -122,6 +114,8 @@ The Terraform configuration creates a Secret Manager secret called `brevo-api-ke
    ```
 
    You should see `roles/secretmanager.secretAccessor` granted to `scc-processor@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com`.
+
+> **Why no placeholder version?** A disabled placeholder version causes the Cloud Function to fail at runtime when it reads `latest`. Terraform therefore creates only the secret container; the operator is responsible for populating the first real version.
 
 ---
 
@@ -259,7 +253,7 @@ Wait 60 seconds, then re-run `terraform apply`.
 
 **Check:**
 
-1. The Brevo API key is stored correctly and the placeholder version is disabled:
+1. The Brevo API key is stored correctly and at least one version is enabled:
 
    ```bash
    gcloud secrets versions list brevo-api-key

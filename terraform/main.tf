@@ -36,7 +36,7 @@ resource "google_service_account" "scc_processor" {
 # Cost: first 10 GiB/month free, then ~$40/TiB; 1-day retention keeps cost low.
 #-------------------------------------------------------------------------------
 resource "google_pubsub_topic" "scc_findings" {
-  # checkov:skip=CKV_GCP_83: GCP-managed encryption is sufficient for transient SCC notification messages; CSEK key management cost exceeds the $5/month target.
+  # checkov:skip=CKV_GCP_83: Risk accepted. CMEK for this topic would require a Cloud KMS key ring/key (~$1/key/month + operations) and key-management overhead that exceeds the $5/month hobby-project target. The topic contains only transient SCC notification messages, uses IAM-restricted publishing (SCC notification SA only), and no sensitive payload data is stored long-term. See context/THREAT_MODEL.md (poisoned-finding scenario) and adr/ADR-007-threat-model-and-trust-boundaries.md.
   # Cost: ~$0 for low-volume SCC notifications under free tier.
   name = "scc-findings"
 
@@ -57,15 +57,10 @@ resource "google_pubsub_topic_iam_member" "scc_publisher" {
   member = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-scc-notification.iam.gserviceaccount.com"
 }
 
-# Deny the default compute service account any access.
-resource "google_pubsub_topic_iam_member" "deny_default_compute" {
-  topic  = google_pubsub_topic.scc_findings.name
-  role   = "roles/pubsub.viewer"
-  member = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
-}
-
 #-------------------------------------------------------------------------------
 # Secret Manager: Brevo API key
+# The secret itself is created here; the version must be added manually after
+# terraform apply so the key value never enters Terraform state.
 # Cost: ~$0.06 per secret version per month if populated; free tier 6 active versions.
 #-------------------------------------------------------------------------------
 resource "google_secret_manager_secret" "brevo_api_key" {
@@ -81,13 +76,6 @@ resource "google_secret_manager_secret" "brevo_api_key" {
   }
 }
 
-# Placeholder version. The actual key must be set outside Terraform via gcloud or console.
-resource "google_secret_manager_secret_version" "brevo_api_key_version" {
-  secret      = google_secret_manager_secret.brevo_api_key.id
-  secret_data = "CHANGEME-SET-BREVO-API-KEY"
-  enabled     = false
-}
-
 # Allow the function service account to access the secret.
 resource "google_secret_manager_secret_iam_member" "function_brevo_accessor" {
   secret_id = google_secret_manager_secret.brevo_api_key.secret_id
@@ -100,8 +88,8 @@ resource "google_secret_manager_secret_iam_member" "function_brevo_accessor" {
 # Cost: ~$0.020/GB/month; source zip is <1 MB.
 #-------------------------------------------------------------------------------
 resource "google_storage_bucket" "source" {
-  # checkov:skip=CKV_GCP_62: Access logging disabled intentionally; bucket contains only ephemeral Cloud Function source zips, not sensitive data.
-  # checkov:skip=CKV_GCP_78: Versioning disabled intentionally; source zips are rebuild artifacts and old versions provide no security value.
+  # checkov:skip=CKV_GCP_62: Risk accepted. Access logging is disabled because this bucket stores only ephemeral Cloud Function source zip artifacts, not sensitive data. Uniform bucket-level access and public-access prevention are enforced, and the bucket is not exposed to external principals. Enabling access logging would require an additional log bucket and add near-zero-but-non-zero cost; the security value is low for this non-sensitive data. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
+  # checkov:skip=CKV_GCP_78: Risk accepted. Versioning is disabled because source zips are rebuild artifacts. Old versions provide no security value for this non-sensitive bucket, and enabling versioning would increase storage cost for no operational benefit. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
   # Cost: ~$0.02/GB/month; source zip < 1 MB.
   name          = "${var.project_id}-securevault-source"
   location      = var.region
@@ -133,7 +121,7 @@ resource "google_storage_bucket_object" "function_source" {
 }
 
 resource "google_cloudfunctions2_function" "scc_processor" {
-  # Cost: free tier 2M requests/month; 256 MB memory tier.
+  # Cost: free tier 2M requests/month; 256 MiB memory tier.
   name        = "scc-processor"
   location    = var.region
   description = "SecureVault SCC finding processor"
@@ -154,6 +142,7 @@ resource "google_cloudfunctions2_function" "scc_processor" {
     timeout_seconds       = 60
     max_instance_count    = 10
     min_instance_count    = 0
+    ingress_settings      = "ALLOW_INTERNAL_ONLY"
     service_account_email = google_service_account.scc_processor.email
     environment_variables = {
       PROJECT_ID       = var.project_id
@@ -167,11 +156,14 @@ resource "google_cloudfunctions2_function" "scc_processor" {
   }
 
   event_trigger {
-    trigger_region        = var.region
-    event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
-    pubsub_topic          = google_pubsub_topic.scc_findings.id
-    retry_policy          = "RETRY_POLICY_RETRY"
-    service_account_email = google_service_account.scc_processor.email
+    trigger_region = var.region
+    event_type     = "google.cloud.pubsub.topic.v1.messagePublished"
+    pubsub_topic   = google_pubsub_topic.scc_findings.id
+    retry_policy   = "RETRY_POLICY_RETRY"
+    # Note: service_account_email is intentionally omitted here. For a Pub/Sub
+    # trigger the Eventarc control plane uses its own managed service account to
+    # invoke the function; setting the function runtime SA in this block is
+    # incorrect and causes trigger creation failures.
   }
 
   labels = {
@@ -186,7 +178,7 @@ resource "google_cloudfunctions2_function" "scc_processor" {
 
 #-------------------------------------------------------------------------------
 # Firestore (Native mode)
-# Cost: first 1M reads, 1M writes, 1 GiB storage free per month.
+# Cost: first ~600k writes/month (20k/day), 1 GiB storage free.
 #-------------------------------------------------------------------------------
 resource "google_firestore_database" "default" {
   # Cost: free tier generous for low-volume audit logs.
@@ -205,7 +197,7 @@ resource "google_firestore_database" "default" {
 # Cost: first 10 GiB storage and 1 TiB query free per month.
 #-------------------------------------------------------------------------------
 resource "google_bigquery_dataset" "analytics" {
-  # checkov:skip=CKV_GCP_81: Default GCP-managed encryption satisfies analytics needs; CSEK not cost-justified for this scale.
+  # checkov:skip=CKV_GCP_81: Risk accepted. Default GCP-managed encryption (Google-managed encryption key) satisfies analytics needs for this low-sensitivity finding data. Configuring CMEK would require a Cloud KMS key ring/key, key-management overhead, and additional cost that is not justified under the $5/month hobby-project target. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
   # Cost: free storage under 10 GiB; partitioned table minimizes scanned bytes.
   dataset_id  = "securevault_analytics"
   description = "SecureVault findings and remediation analytics"
@@ -217,8 +209,8 @@ resource "google_bigquery_dataset" "analytics" {
 }
 
 resource "google_bigquery_table" "findings_history" {
-  # checkov:skip=CKV_GCP_80: Default GCP-managed encryption is sufficient for findings analytics; CSEK not justified under $5/month target.
-  # checkov:skip=CKV_GCP_121: Deletion protection disabled to allow cost-controlled cleanup; data is replicated to Firestore and Cloud Audit Logs.
+  # checkov:skip=CKV_GCP_80: Risk accepted. Default GCP-managed encryption is sufficient for findings analytics. CMEK is not justified under the $5/month target and would introduce key-management overhead. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
+  # checkov:skip=CKV_GCP_121: Risk accepted. Deletion protection is disabled to allow cost-controlled cleanup of the analytics table. The same data is replicated to Firestore (operational state) and captured in Cloud Audit Logs, so accidental deletion does not destroy the only copy of audit evidence. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
   # Cost: date partitioning reduces query cost significantly.
   dataset_id = google_bigquery_dataset.analytics.dataset_id
   table_id   = "findings_history"
