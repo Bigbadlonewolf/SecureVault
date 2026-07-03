@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from main import process_scc_finding
+from scc_processor.main import process_scc_finding
 
 
 def _pubsub_event(payload: dict) -> dict:
@@ -24,10 +24,10 @@ def context():
     return ctx
 
 
-@patch("main.stream_finding")
-@patch("main.log_action")
-@patch("main.send_alert")
-@patch("main.remediate")
+@patch("scc_processor.main.stream_finding")
+@patch("scc_processor.main.log_action")
+@patch("scc_processor.main.send_alert")
+@patch("scc_processor.main.remediate")
 def test_critical_finding_triggers_remediation_and_alert(
     mock_remediate, mock_alert, mock_log_action, mock_stream, context, env_vars
 ):
@@ -55,10 +55,10 @@ def test_critical_finding_triggers_remediation_and_alert(
     mock_stream.assert_called_once()
 
 
-@patch("main.stream_finding")
-@patch("main.log_action")
-@patch("main.send_alert")
-@patch("main.remediate")
+@patch("scc_processor.main.stream_finding")
+@patch("scc_processor.main.log_action")
+@patch("scc_processor.main.send_alert")
+@patch("scc_processor.main.remediate")
 def test_high_finding_triggers_alert_only(
     mock_remediate, mock_alert, mock_log_action, mock_stream, context, env_vars
 ):
@@ -85,10 +85,10 @@ def test_high_finding_triggers_alert_only(
     mock_stream.assert_called_once()
 
 
-@patch("main.stream_finding")
-@patch("main.log_action")
-@patch("main.send_alert")
-@patch("main.remediate")
+@patch("scc_processor.main.stream_finding")
+@patch("scc_processor.main.log_action")
+@patch("scc_processor.main.send_alert")
+@patch("scc_processor.main.remediate")
 def test_medium_finding_logged_not_alerted(
     mock_remediate, mock_alert, mock_log_action, mock_stream, context, env_vars
 ):
@@ -113,10 +113,10 @@ def test_medium_finding_logged_not_alerted(
     mock_stream.assert_called_once()
 
 
-@patch("main.stream_finding")
-@patch("main.log_action")
-@patch("main.send_alert")
-@patch("main.remediate")
+@patch("scc_processor.main.stream_finding")
+@patch("scc_processor.main.log_action")
+@patch("scc_processor.main.send_alert")
+@patch("scc_processor.main.remediate")
 def test_bigquery_streaming_called_with_correct_parameters(
     mock_remediate, mock_alert, mock_log_action, mock_stream, context, env_vars
 ):

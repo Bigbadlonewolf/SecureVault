@@ -140,7 +140,7 @@ resource "google_cloudfunctions2_function" "scc_processor" {
 
   build_config {
     runtime     = "python311"
-    entry_point = "process_scc_finding"
+    entry_point = "scc_processor.main.process_scc_finding"
     source {
       storage_source {
         bucket = google_storage_bucket.source.name

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as real_requests
 
-from processors.notifier import send_alert
+from scc_processor.processors.notifier import send_alert
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def base_finding():
     }
 
 
-@patch("processors.notifier.secretmanager")
-@patch("processors.notifier.requests")
+@patch("scc_processor.processors.notifier.secretmanager")
+@patch("scc_processor.processors.notifier.requests")
 def test_email_payload_format(mock_requests, mock_secretmanager, base_finding, env_vars):
     secret_client = MagicMock()
     secret_client.access_secret_version.return_value.payload.data = b"fake-api-key"
@@ -46,8 +46,8 @@ def test_email_payload_format(mock_requests, mock_secretmanager, base_finding, e
     assert "SUCCESS" in payload["textContent"]
 
 
-@patch("processors.notifier.secretmanager")
-@patch("processors.notifier.requests")
+@patch("scc_processor.processors.notifier.secretmanager")
+@patch("scc_processor.processors.notifier.requests")
 def test_brevo_failure_returns_false(mock_requests, mock_secretmanager, base_finding, env_vars):
     secret_client = MagicMock()
     secret_client.access_secret_version.return_value.payload.data = b"fake-api-key"
@@ -60,8 +60,8 @@ def test_brevo_failure_returns_false(mock_requests, mock_secretmanager, base_fin
     assert send_alert(base_finding, action_result) is False
 
 
-@patch("processors.notifier.secretmanager")
-@patch("processors.notifier.requests")
+@patch("scc_processor.processors.notifier.secretmanager")
+@patch("scc_processor.processors.notifier.requests")
 def test_secret_manager_key_retrieval(mock_requests, mock_secretmanager, base_finding, env_vars):
     secret_client = MagicMock()
     secret_client.access_secret_version.return_value.payload.data = b"retrieved-key"
@@ -78,16 +78,16 @@ def test_secret_manager_key_retrieval(mock_requests, mock_secretmanager, base_fi
     assert headers["api-key"] == "retrieved-key"
 
 
-@patch("processors.notifier.secretmanager")
-@patch("processors.notifier.requests")
+@patch("scc_processor.processors.notifier.secretmanager")
+@patch("scc_processor.processors.notifier.requests")
 def test_missing_alert_email_returns_false(mock_requests, mock_secretmanager, base_finding, monkeypatch):
     monkeypatch.delenv("ALERT_EMAIL", raising=False)
     assert send_alert(base_finding, {"action": "ALERT", "status": "SUCCESS"}) is False
     mock_requests.post.assert_not_called()
 
 
-@patch("processors.notifier.secretmanager")
-@patch("processors.notifier.requests")
+@patch("scc_processor.processors.notifier.secretmanager")
+@patch("scc_processor.processors.notifier.requests")
 def test_subject_contains_severity_and_finding_class(mock_requests, mock_secretmanager, base_finding, env_vars):
     secret_client = MagicMock()
     secret_client.access_secret_version.return_value.payload.data = b"fake-api-key"

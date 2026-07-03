@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from main import _parse_finding
+from scc_processor.main import _parse_finding
 
 
 def test_parse_finding_unwraps_scc_notification():

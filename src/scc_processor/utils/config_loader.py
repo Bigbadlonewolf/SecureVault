@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 import yaml
 
-_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "config.yaml")
 _config_cache: Dict[str, Any] = {}
 
 

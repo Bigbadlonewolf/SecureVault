@@ -1,10 +1,9 @@
 name: Terraform Plan
 
+# This workflow is now part of the unified CI pipeline in ci.yml.
+# It remains available for manual invocation when needed.
 on:
-  pull_request:
-    paths:
-      - 'terraform/**'
-      - '.github/workflows/terraform-plan.yml'
+  workflow_dispatch:
 
 jobs:
   plan:

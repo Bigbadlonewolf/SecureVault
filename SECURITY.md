@@ -22,12 +22,12 @@ Please report security vulnerabilities by emailing **Lanreoluokunigbadwolf@gmail
 
 ## Scanning
 
-Every push is scanned by:
+Every push is scanned by the unified [`CI`](.github/workflows/ci.yml) workflow:
 
+- `pytest` for unit-test coverage
 - `bandit` for Python security issues
 - `pip-audit` for vulnerable dependencies
 - `Checkov` for Terraform misconfigurations
-- `gcloud secrets scan` for exposed credentials
 - `truffleHog` for deep secret detection
 
 ## Known Limitations
@@ -40,4 +40,4 @@ Every push is scanned by:
 - No analyst workflow tiering (single pipeline, no L1/L2/L3).
 - Tested with simulated findings, not production-scale SCC volume.
 
-Each limitation is tracked as a Phase 2 enhancement in [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md).
+Each limitation is tracked as a Phase 2 enhancement in [`EVOLUTION.md`](EVOLUTION.md).

@@ -10,8 +10,8 @@ from typing import Any, Dict
 import requests
 from google.cloud import secretmanager
 
-from utils.config_loader import load_config
-from utils.logger import get_logger
+from scc_processor.utils.config_loader import load_config
+from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 

@@ -10,7 +10,7 @@ from typing import Optional
 
 from google.cloud import bigquery
 
-from utils.logger import get_logger
+from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 

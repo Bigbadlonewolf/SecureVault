@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from processors.remediator import remediate
+from scc_processor.processors.remediator import remediate
 
 
 def test_unmapped_critical_returns_skipped_unmapped():
@@ -23,7 +23,7 @@ def test_unmapped_critical_returns_skipped_unmapped():
     assert result["action"] == "NONE"
 
 
-@patch("processors.remediator.storage")
+@patch("scc_processor.processors.remediator.storage")
 def test_public_bucket_acl_handler_removes_public_members(mock_storage, env_vars):
     policy = MagicMock()
     policy.roles = ["roles/storage.objectViewer"]
@@ -49,7 +49,7 @@ def test_public_bucket_acl_handler_removes_public_members(mock_storage, env_vars
     bucket.set_iam_policy.assert_called_once_with(policy)
 
 
-@patch("processors.remediator.compute_v1")
+@patch("scc_processor.processors.remediator.compute_v1")
 def test_open_firewall_handler_disables_permissive_rule(mock_compute, env_vars):
     rule = MagicMock()
     rule.disabled = False
@@ -76,7 +76,7 @@ def test_open_firewall_handler_disables_permissive_rule(mock_compute, env_vars):
     firewalls_client.patch.assert_called_once()
 
 
-@patch("processors.remediator.storage")
+@patch("scc_processor.processors.remediator.storage")
 def test_handler_error_returns_failure_status(mock_storage, env_vars):
     mock_storage.Client.side_effect = RuntimeError("API unavailable")
 

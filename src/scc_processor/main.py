@@ -10,13 +10,13 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from processors.classifier import classify_finding
-from processors.notifier import send_alert
-from processors.remediator import remediate
-from storage.bigquery_client import stream_finding
-from storage.firestore_client import log_action
-from utils.config_loader import load_config
-from utils.logger import get_logger
+from scc_processor.processors.classifier import classify_finding
+from scc_processor.processors.notifier import send_alert
+from scc_processor.processors.remediator import remediate
+from scc_processor.storage.bigquery_client import stream_finding
+from scc_processor.storage.firestore_client import log_action
+from scc_processor.utils.config_loader import load_config
+from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 

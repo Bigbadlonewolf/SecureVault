@@ -56,7 +56,7 @@ jobs:
             --gen2 \
             --runtime=python311 \
             --source=src \
-            --entry-point=process_scc_finding \
+            --entry-point=scc_processor.main.process_scc_finding \
             --trigger-topic=scc-findings \
             --service-account=scc-processor@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --region=${{ vars.GCP_REGION }}

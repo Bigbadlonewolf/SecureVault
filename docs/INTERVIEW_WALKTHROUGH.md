@@ -5,13 +5,13 @@
 > **Date:** 2026-07-03  
 > **Status:** Initial release (v0.1.0)
 
-This document is a 15-minute panel defense narrative for SecureVault. It is organized by time segment, references the Architecture Decision Records (ADRs), and includes prepared answers for expected panel questions.
+This document is a **15-minute panel defense narrative** for SecureVault. It is organized by time segment, references the Architecture Decision Records (ADRs), and includes prepared answers for expected panel questions.
 
 ---
 
 ## Defense Script
 
-> “I architected SecureVault to solve a problem I observed across financial institutions: security findings in GCP go unnoticed until audit time. I made every architectural decision — service selection, threat model, response matrix, cost strategy. I used an AI coding agent as my implementation engineer to accelerate delivery, validating every line through security scanners and unit tests. The result is a production-ready detection pipeline that costs under $5 per month and demonstrates how modern architects leverage AI without sacrificing rigor.”
+> “I architected SecureVault to solve a problem I observed across financial institutions: security findings in GCP go unnoticed until audit time. I made every architectural decision — service selection, threat model, response matrix, cost strategy — and I used an AI coding agent as my implementation engineer to accelerate delivery, validating every line through security scanners and unit tests. The result is a production-ready detection pipeline that costs under $5 per month and demonstrates how modern architects can leverage AI without sacrificing rigor.”
 
 ---
 
@@ -30,12 +30,12 @@ The architecture is event-driven and fully serverless on GCP.
 ```mermaid
 flowchart TD
     SCC[Security Command Center] -->|notification| PS[Cloud Pub/Sub: scc-findings]
-    PS -->|event trigger| CF[Cloud Function: scc-processor<br/>Python 3.11 Gen 2]
+    PS -->|event trigger| CF[Cloud Function: scc-processor<br/>src/scc_processor/main.py]
     CF -->|classify| DE[Decision Engine]
     DE -->|CRITICAL + mapped| REM[Auto-remediate]
     DE -->|CRITICAL + unmapped| ALERT1[Alert only]
     DE -->|HIGH| ALERT2[Alert]
-    DE -->|MEDIUM| LOG[Log to Firestore]
+    DE -->|MEDIUM / LOW| LOG[Log to Firestore]
     REM -->|PUBLIC_BUCKET_ACL| A1[Remove allUsers]
     REM -->|OPEN_FIREWALL| A2[Disable rule]
     REM -->|OVER_PRIVILEGED_SA| A3[Trim roles]
@@ -57,7 +57,7 @@ flowchart TD
 | **Firestore + BigQuery** | Firestore for fast operational state; BigQuery for partitioned analytics. | [ADR-005](../adr/ADR-005-bigquery-plus-firestore.md) |
 | **Brevo** | Free tier covers expected alert volume; graceful degradation to Cloud Logging. | [ADR-006](../adr/ADR-006-brevo-free-tier-alerting.md) |
 | **Trust Boundaries** | Dedicated service account, custom remediation role, publisher-restricted Pub/Sub topic. | [ADR-007](../adr/ADR-007-threat-model-and-trust-boundaries.md) |
-| **Cost Engineering** | 256 MB memory, 1-day Pub/Sub retention, date-partitioned BigQuery, $15 billing alert. | [ADR-008](../adr/ADR-008-cost-strategy-under-20-usd.md) |
+| **Cost Engineering** | 256 MiB memory, 1-day Pub/Sub retention, date-partitioned BigQuery, $15 billing alert. | [ADR-008](../adr/ADR-008-cost-strategy-under-20-usd.md) |
 
 ---
 
@@ -76,7 +76,7 @@ Auto-remediation is powerful but dangerous. I chose a conservative response matr
 - **CRITICAL + mapped class** → auto-remediate + alert.
 - **CRITICAL + unmapped class** → alert only.
 - **HIGH** → alert only.
-- **MEDIUM** → log for digest.
+- **MEDIUM / LOW** → log for digest.
 
 The three mapped classes — public bucket ACL, open firewall rule, and over-privileged service account — have safe, reversible remediation paths. Any finding we have not modeled is escalated to a human rather than risk a production outage.
 
@@ -96,23 +96,33 @@ Cloud Audit Logs capture every IAM and API call, making tampering detectable.
 
 ## 4. Cost Engineering (2 minutes)
 
-The target operating cost is under **$5/month**, with a hard ceiling of **$20/month**.
+The target operating cost is **under $5/month**, with a hard ceiling of **$20/month**.
 
-| Scale | Estimated Cost | Buffer (25%) | Total |
-|---|---:|---:|---:|
-| ~100 findings/mo | ~$0.01 | $0.01 | ~$0.02 |
-| ~1,000 findings/mo | ~$0.20 | $0.05 | ~$0.25 |
-| ~10,000 findings/mo | ~$2.00 | $0.50 | ~$2.50 |
+| Scale | Function Compute | Firestore | BigQuery | Secret Mgr | **Total** |
+|---|---:|---:|---:|---:|---:|
+| ~100 findings/mo | $0 | $0 | $0 | ~$0.06 | **~$0.07** |
+| ~1,000 findings/mo | $0 | $0 | $0 | ~$0.06 | **~$0.07** |
+| ~10,000 findings/mo | $0 | ~$0.00–$0.10 | ~$0.01 | ~$0.06 | **~$0.10–$0.20** |
 
 Key optimizations:
 
-- **Cloud Function:** 256 MB memory, Gen 2, `min_instance_count = 0`.
+- **Cloud Function:** 256 MiB memory, Gen 2, `min_instance_count = 0`.
 - **Pub/Sub:** 1-day retention instead of the default 7 days.
 - **BigQuery:** Date-partitioned `findings_history` table.
 - **Brevo:** Free tier covers 300 emails/day.
 - **Billing alert:** Fires at $15/month, well before the $20 ceiling.
 
-A full cost model is in [`context/COST_ANALYSIS.md`](../context/COST_ANALYSIS.md).
+At 10,000 findings/month with a **2-second execution** (e.g., slow API calls), the pay-as-you-go function math is:
+
+```text
+GB-s   = 10,000 × 2 × 0.25 = 5,000 GB-s   → $0.0125
+vCPU-s = 10,000 × 2 × 0.20 = 4,000 vCPU-s → $0.0960
+Requests = 10,000 × $0.40/M                → $0.0040
+```
+
+That is **~$0.11 pay-as-you-go**, but it is still inside the always-free tier, so the actual bill rounds to **~$0.00–$0.01**.
+
+A full cost model with sensitivity analysis is in [`context/COST_ANALYSIS.md`](../context/COST_ANALYSIS.md).
 
 ---
 
@@ -126,7 +136,7 @@ I am transparent about the gaps in v0.1.0:
 - **Analyst tiering:** Today there is one pipeline. Phase 2 would route findings to L1/L2/L3 queues based on class and asset criticality.
 - **Multi-signal correlation:** Currently SCC only. Phase 2 would ingest Cloud Armor, VPC Flow Logs, and Cloud IDS for richer context.
 
-These limitations are documented honestly in [`README.md`](../README.md) and [`SECURITY.md`](../SECURITY.md).
+These limitations are documented honestly in [`README.md`](../README.md), [`SECURITY.md`](../SECURITY.md), and [`EVOLUTION.md`](../EVOLUTION.md).
 
 ---
 
@@ -165,7 +175,7 @@ Health is monitored through four signals:
 
 ### Q6. Walk me through the cost at 10× and 100× scale.
 
-At 10× scale (~1,000 findings/month), the cost is approximately $0.25 with buffer. At 100× scale (~10,000 findings/month), it is approximately $2.50 with buffer. Both remain under the $5 target. The main trigger for architectural change is around 50,000 findings/month, where I would add Pub/Sub filtering and consider Cloud Run for finer cost control. See [`context/COST_ANALYSIS.md`](../context/COST_ANALYSIS.md).
+At 10× scale (~1,000 findings/month), the cost is approximately **$0.07/month**, dominated by the Secret Manager secret version. At 100× scale (~10,000 findings/month), it is approximately **$0.10–$0.20/month**. Both remain well under the $5 target. The main trigger for architectural change is around 50,000–100,000 findings/month, where I would add Pub/Sub filtering and consider Cloud Run for finer cost control. See [`context/COST_ANALYSIS.md`](../context/COST_ANALYSIS.md).
 
 ### Q7. Where are the secrets, and how are they protected?
 
@@ -177,14 +187,14 @@ SecureVault maps to NIST SP 800-53 Rev 5 (SI-4, IR-4, AU-6, CM-6), PCI DSS v4.0 
 
 ### Q9. What is your testing strategy?
 
-The pipeline is validated at three levels:
+The pipeline is validated at four levels:
 
 1. **Unit tests** with `pytest`, mocking all GCP and Brevo calls.
 2. **Local emulation** with `functions-framework`.
 3. **Integration tests** by publishing real Pub/Sub messages and verifying Firestore, BigQuery, and email outputs.
 4. **Security scans** with `bandit`, `pip-audit`, `Checkov`, `truffleHog`, and `gcloud secrets scan`.
 
-See [`docs/TESTING.md`](TESTING.md).
+See [`docs/TESTING.md`](docs/TESTING.md) and the [`Makefile`](../Makefile).
 
 ### Q10. What if the Cloud Function is compromised?
 
@@ -203,16 +213,17 @@ I would make four changes:
 3. Deploy multi-region for resilience.
 4. Integrate with the enterprise identity provider for admin actions and audit attribution.
 
-These are tracked as Phase 2 enhancements in [`README.md`](../README.md).
+These are tracked as Phase 2 enhancements in [`EVOLUTION.md`](../EVOLUTION.md).
 
 ---
 
 ## References
 
 - [`README.md`](../README.md)
-- [`docs/DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
-- [`docs/OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md)
-- [`docs/TESTING.md`](TESTING.md)
+- [`EVOLUTION.md`](../EVOLUTION.md)
+- [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md)
+- [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- [`docs/TESTING.md`](docs/TESTING.md)
 - [`context/THREAT_MODEL.md`](../context/THREAT_MODEL.md)
 - [`context/COMPLIANCE_MAPPING.md`](../context/COMPLIANCE_MAPPING.md)
 - [`context/COST_ANALYSIS.md`](../context/COST_ANALYSIS.md)

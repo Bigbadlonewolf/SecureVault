@@ -8,7 +8,7 @@ from typing import Optional
 
 from google.cloud import firestore
 
-from utils.logger import get_logger
+from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 

@@ -15,7 +15,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from utils.config_loader import clear_cache  # noqa: E402
+from scc_processor.utils.config_loader import clear_cache  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

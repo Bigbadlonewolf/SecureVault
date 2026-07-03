@@ -6,7 +6,7 @@ License: MIT
 
 import pytest
 
-from processors.classifier import classify_finding
+from scc_processor.processors.classifier import classify_finding
 
 
 @pytest.fixture

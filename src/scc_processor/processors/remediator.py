@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from google.cloud import compute_v1, resourcemanager_v3, storage
 
-from utils.logger import get_logger
+from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 

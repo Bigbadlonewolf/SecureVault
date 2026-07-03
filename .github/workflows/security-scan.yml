@@ -1,10 +1,9 @@
 name: Security Scan
 
+# This workflow is now part of the unified CI pipeline in ci.yml.
+# It remains available for manual invocation when needed.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   scan:
@@ -25,7 +24,7 @@ jobs:
         run: pip install bandit pip-audit
 
       - name: Run bandit
-        run: bandit -r src/ -ll
+        run: bandit -r src/ scripts/ -ll
 
       - name: Run pip-audit
         run: pip-audit -r src/requirements.txt --desc

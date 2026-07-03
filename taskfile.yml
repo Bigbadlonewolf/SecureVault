@@ -1,0 +1,76 @@
+# SecureVault — Cross-Platform Taskfile
+# Architect: Lanre Oluokun | Implementation: AI-assisted
+# License: MIT
+#
+# Install Task from https://taskfile.dev, then run `task` to see available targets.
+
+version: '3'
+
+vars:
+  PYTHON: python
+  SRC: src
+  TF: terraform
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  install:
+    desc: Install Python dependencies into the active virtual environment
+    cmds:
+      - '{{.PYTHON}} -m pip install -r {{.SRC}}/requirements.txt'
+      - '{{.PYTHON}} -m pip install pytest bandit pip-audit checkov truffleHog functions-framework'
+
+  test:
+    desc: Run pytest suite
+    cmds:
+      - pytest -q
+
+  security:
+    desc: Run all security scanners
+    cmds:
+      - bandit -r {{.SRC}}/ scripts/ -ll
+      - pip-audit -r {{.SRC}}/requirements.txt --desc
+      - checkov -d {{.TF}}/ --framework terraform --quiet
+      - truffleHog filesystem . --only-verified
+
+  terraform-plan:
+    desc: Validate and plan Terraform changes
+    dir: '{{.TF}}'
+    cmds:
+      - terraform fmt -recursive
+      - terraform validate
+      - terraform plan -input=false -out=plan.tfplan
+
+  terraform-apply:
+    desc: Apply a previously saved Terraform plan
+    dir: '{{.TF}}'
+    cmds:
+      - terraform apply -input=false plan.tfplan
+
+  simulate-finding:
+    desc: Publish a sample SCC finding to the scc-findings topic
+    cmds:
+      - |
+        {{.PYTHON}} scripts/simulate_finding.py \
+          --project {{.PROJECT_ID}} \
+          --finding-class {{.FINDING_CLASS | default "PUBLIC_BUCKET_ACL"}}
+    requires:
+      vars: [PROJECT_ID]
+
+  deploy:
+    desc: Deploy infrastructure and Cloud Function (requires GCP auth)
+    deps: [terraform-apply]
+    cmds:
+      - echo "Infrastructure applied. The Cloud Function is deployed by Terraform."
+
+  clean:
+    desc: Remove Python cache and Terraform plan artifacts
+    cmds:
+      - cmd: find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+        ignore_error: true
+      - cmd: find . -type f -name '*.pyc' -delete 2>/dev/null || true
+        ignore_error: true
+      - rm -f {{.TF}}/plan.tfplan {{.SRC}}.zip

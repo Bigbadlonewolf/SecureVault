@@ -41,6 +41,11 @@ For deployment steps, see [`docs/DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md). For
 
    For pure unit tests, these values can be placeholder strings because GCP calls are mocked.
 
+   You can also run the convenience target:
+   ```bash
+   make test
+   ```
+
 ---
 
 ## Local Unit Tests
@@ -51,6 +56,12 @@ Run the full unit test suite with `pytest`:
 pytest tests/ -v
 ```
 
+Or use the Makefile:
+
+```bash
+make test
+```
+
 ### Test Coverage
 
 | Test File | Focus |
@@ -58,6 +69,7 @@ pytest tests/ -v
 | `tests/test_classifier.py` | Severity mapping, class overrides, default behavior |
 | `tests/test_remediator.py` | Remediation handlers, unmapped CRITICAL skip, error handling |
 | `tests/test_notifier.py` | Brevo payload format, graceful failure, Secret Manager mocking |
+| `tests/test_main.py` | Pub/Sub parsing and entry-point orchestration |
 | `tests/test_integration.py` | End-to-end pipeline from Pub/Sub message to storage |
 
 ### Expected Output
@@ -136,7 +148,14 @@ After deploying the pipeline, publish a real Pub/Sub message and verify all down
 
 ### Step 1: Publish a Test Message
 
-Encode a sample finding and publish it to the `scc-findings` topic:
+Use the provided simulator to publish a sample finding:
+
+```bash
+export PROJECT_ID=YOUR_GCP_PROJECT_ID
+python scripts/simulate_finding.py --project $PROJECT_ID --finding-class PUBLIC_BUCKET_ACL
+```
+
+Or publish manually with `gcloud`:
 
 ```bash
 export PROJECT_ID=YOUR_GCP_PROJECT_ID
@@ -147,7 +166,7 @@ PAYLOAD=$(echo '{
     "resourceName": "//storage.googleapis.com/projects/_/buckets/test-bucket",
     "category": "PUBLIC_BUCKET_ACL",
     "severity": "CRITICAL",
-    "findingClass": "MISCONFIGURATION",
+    "findingClass": "PUBLIC_BUCKET_ACL",
     "createTime": "2026-07-03T12:00:00Z",
     "eventTime": "2026-07-03T12:00:00Z"
   }
@@ -194,7 +213,7 @@ All source code and infrastructure must pass the scanners from Stage 7 before an
 
 | Scanner | Command | Scope |
 |---|---|---|
-| `bandit` | `bandit -r src/ -f json -o bandit-report.json` | Python security anti-patterns |
+| `bandit` | `bandit -r src/ scripts/ -f json -o bandit-report.json` | Python security anti-patterns |
 | `pip-audit` | `pip-audit --format=json --desc -r src/requirements.txt` | Vulnerable Python dependencies |
 | `Checkov` | `checkov --directory terraform/ -o json` | Terraform misconfigurations |
 | `gcloud secrets scan` | `gcloud secrets scan --source=src/` | GCP secret-exposure detection |
@@ -205,7 +224,7 @@ All source code and infrastructure must pass the scanners from Stage 7 before an
 
 ```bash
 # Python SAST
-bandit -r src/ -f json -o bandit-report.json
+bandit -r src/ scripts/ -f json -o bandit-report.json
 
 # Dependency audit
 pip-audit --format=json --desc -r src/requirements.txt
@@ -248,11 +267,14 @@ Results are recorded in `SECURITY_SCAN_REPORT.md` (produced during Stage 7 secur
 
 ## CI/CD Testing
 
-GitHub Actions run the same scans and tests automatically:
+GitHub Actions run the same scans and tests automatically through the unified `.github/workflows/ci.yml` workflow:
 
-- `.github/workflows/security-scan.yml` — runs `bandit`, `pip-audit`, and `Checkov` on every push and pull request.
-- `.github/workflows/terraform-plan.yml` — runs `terraform plan` on pull requests affecting `terraform/`.
-- `.github/workflows/deploy.yml` — manually triggered deployment after security scans pass on `main`.
+- **Python Tests** — runs `pytest` on every push and pull request.
+- **Security Scan** — runs `bandit`, `pip-audit`, `Checkov`, and `truffleHog` on every push and pull request.
+- **Terraform Plan** — runs `terraform fmt`, `validate`, and `plan` on pull requests in the canonical repository.
+- `.github/workflows/deploy.yml` — manually triggered deployment after CI passes on `main`.
+
+The legacy `security-scan.yml` and `terraform-plan.yml` workflows remain available for manual dispatch but are superseded by `ci.yml`.
 
 Open a pull request to validate your changes through CI before deploying.
 

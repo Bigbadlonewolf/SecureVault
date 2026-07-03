@@ -6,7 +6,7 @@ License: MIT
 
 from typing import Any, Dict, List
 
-from utils.config_loader import load_config
+from scc_processor.utils.config_loader import load_config
 
 # SCC severity values mapped to SecureVault severity levels.
 _SCC_SEVERITY_MAP = {
