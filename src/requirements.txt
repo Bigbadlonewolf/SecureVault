@@ -1,0 +1,11 @@
+functions-framework==3.*
+google-cloud-pubsub==2.*
+google-cloud-firestore==2.*
+google-cloud-bigquery==3.*
+google-cloud-secret-manager==2.*
+google-cloud-logging==3.*
+google-cloud-storage==2.*
+google-cloud-compute==1.*
+google-cloud-resource-manager==1.*
+requests==2.33.0
+PyYAML==6.0.1

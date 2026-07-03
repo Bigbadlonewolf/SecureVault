@@ -1,0 +1,26 @@
+# SecureVault non-sensitive runtime configuration.
+# Secrets (Brevo API key) are loaded from Secret Manager, not from this file.
+
+response_matrix:
+  CRITICAL:
+    auto_remediate:
+      - PUBLIC_BUCKET_ACL
+      - OPEN_FIREWALL
+      - OVER_PRIVILEGED_SA
+    default_action: alert_only
+  HIGH:
+    action: alert
+  MEDIUM:
+    action: log_digest
+
+# Finding classes that should always be elevated to CRITICAL regardless of SCC severity.
+severity_overrides:
+  - PUBLIC_BUCKET_ACL
+  - OPEN_FIREWALL
+  - OVER_PRIVILEGED_SA
+
+# Brevo SMTP/API endpoint configuration.
+brevo:
+  api_url: https://api.brevo.com/v3/smtp/email
+  sender_email: securevault@lanreoluokun.com
+  sender_name: SecureVault Alerts
