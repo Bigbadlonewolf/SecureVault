@@ -75,7 +75,7 @@ flowchart LR
 
 - The Pub/Sub topic grants `roles/pubsub.publisher` only to the SCC notification service account (`gcp-sa-scc-notification.iam.gserviceaccount.com`).
 - The default compute service account is explicitly denied access to the topic.
-- The response matrix limits auto-remediation to three well-understood finding classes; any unmapped CRITICAL finding is alerted on but **not** auto-remediated.
+- The response matrix limits auto-remediation to two well-understood finding classes; any unmapped CRITICAL finding is alerted on but **not** auto-remediated.
 - All publish attempts are recorded in Cloud Audit Logs for anomaly detection.
 - Finding schema validation in `processors/classifier.py` rejects malformed payloads.
 
@@ -91,13 +91,14 @@ flowchart LR
 **Mitigations:**
 
 - The function runs under a dedicated service account, not the default compute account.
-- A custom IAM role (`securevault.remediator`) grants only the minimum permissions needed for the three supported remediation handlers:
+- A custom IAM role (`securevault.remediator`) is scoped to remediation-adjacent permissions:
   - `storage.buckets.get`, `storage.buckets.setIamPolicy`
   - `compute.firewalls.get`, `compute.firewalls.update`
   - `iam.serviceAccounts.get`, `iam.serviceAccounts.setIamPolicy`
   - `resourcemanager.projects.getIamPolicy`, `resourcemanager.projects.setIamPolicy`
+- **Only the first two permission pairs are currently exercised.** `PUBLIC_BUCKET_ACL` and `OPEN_FIREWALL` are the two auto-remediated classes (see ADR-004). The IAM/resourcemanager permissions above remain provisioned for a service-account remediation handler that exists in source but is deliberately excluded from the response matrix — tracked as technical debt to revoke from the Terraform role once the handler is either scoped safely or deleted.
 - No `roles/owner`, `roles/editor`, or broad `resourcemanager.*` permissions are assigned.
-- The function does **not** create new bindings; it only removes `allUsers` / `allAuthenticatedUsers` from buckets, disables overly permissive firewall rules, and trims excess predefined roles from service accounts.
+- The function does **not** create new bindings; the two active handlers only remove `allUsers` / `allAuthenticatedUsers` from buckets and disable overly permissive firewall rules.
 - Every remediation action is written to Firestore and BigQuery with a timestamp and outcome, producing an immutable audit trail.
 - Unmapped CRITICAL findings trigger alerts but skip remediation (status `SKIPPED_UNMAPPED`).
 

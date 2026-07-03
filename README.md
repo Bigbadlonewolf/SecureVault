@@ -33,8 +33,9 @@ flowchart TD
     DE -->|MEDIUM / LOW| LOG[Log for digest]
     REM -->|PUBLIC_BUCKET_ACL| A1[Remove allUsers / allAuthenticatedUsers]
     REM -->|OPEN_FIREWALL| A2[Disable overly permissive rule]
-    REM -->|OVER_PRIVILEGED_SA| A3[Remove excess predefined roles]
+    DE -->|OVER_PRIVILEGED_SA| ALERT3[Alert only — not auto-remediated by design]
     ALERT1 --> BV[Brevo Email]
+    ALERT3 --> BV
     ALERT2 --> BV
     CF --> AUDIT[Audit Trail]
     AUDIT --> FS[Firestore: remediation_log]
@@ -191,7 +192,7 @@ See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for a fresh-GCP-proje
 
 This is a portfolio-grade, single-region pipeline. It has **not** been deployed to a production financial environment or load-tested against real SCC volume.
 
-- **Auto-remediation can cause outages.** Only three finding classes are auto-remediated, and every action is logged, but a misconfigured response matrix or a poisoned finding could still remove legitimate access. Start in alert-only mode if you are risk-averse.
+- **Auto-remediation can cause outages.** Only two finding classes (`PUBLIC_BUCKET_ACL`, `OPEN_FIREWALL`) are auto-remediated, and every action is logged, but a misconfigured response matrix or a poisoned finding could still remove legitimate access. A third class, `OVER_PRIVILEGED_SA`, is deliberately alert-only — see ADR-004. Start in alert-only mode if you are risk-averse.
 - **Brevo free tier has no SLA.** If alerting fails, the function continues processing and logs the failure, but there is no automatic fallback channel yet.
 - **Single-region deployment** means there is no automatic disaster recovery.
 - **No SOAR integration.** Ticketing, analyst queues, and escalation playbooks are manual or Phase 2.
@@ -257,7 +258,7 @@ make simulate-finding  # or: task simulate-finding PROJECT_ID=your-project
 
 - Single-region deployment (no multi-region DR) → Phase 2: multi-region backup function.
 - Brevo free tier has no SLA → Phase 2: add PagerDuty/SNS fallback channel.
-- Auto-remediation scoped to 3 finding classes → Phase 2: expand to public SQL, open Cloud SQL, etc.
+- Auto-remediation scoped to 2 finding classes → Phase 2: expand to public SQL, open Cloud SQL, etc.
 - No SOAR integration → Phase 2: ServiceNow/Jira webhook connector.
 - No analyst workflow tiering → Phase 2: L1/L2/L3 queue routing.
 - No correlation across multiple signal sources → Phase 2: ingest Cloud Armor, VPC Flow Logs.
