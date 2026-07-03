@@ -16,7 +16,8 @@ from scc_processor.processors.notifier import send_alert
 def base_finding():
     return {
         "findingId": "notify-test",
-        "findingClass": "OPEN_FIREWALL",
+        "findingClass": "MISCONFIGURATION",
+        "category": "FIREWALL_OPEN",
         "severity": "CRITICAL",
         "resource": "projects/test/firewalls/allow-all-ssh",
         "createTime": "2026-07-03T12:00:00Z",

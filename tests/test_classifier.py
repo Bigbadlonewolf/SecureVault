@@ -13,7 +13,7 @@ from scc_processor.processors.classifier import classify_finding
 def base_finding():
     return {
         "findingId": "test",
-        "findingClass": "UNUSED_SERVICE_ACCOUNT",
+        "findingClass": "MISCONFIGURATION",
         "category": "SERVICE_ACCOUNT",
         "resource": "projects/test/serviceAccounts/unused@test.iam.gserviceaccount.com",
     }
@@ -37,10 +37,21 @@ def test_classify_medium(base_finding):
 def test_classify_override_elevates_public_bucket_to_critical():
     finding = {
         "findingId": "override",
-        "findingClass": "PUBLIC_BUCKET_ACL",
+        "findingClass": "MISCONFIGURATION",
         "category": "STORAGE_BUCKET_PUBLIC",
         "severity": "HIGH",
         "resource": "gs://public-bucket",
+    }
+    assert classify_finding(finding) == "CRITICAL"
+
+
+def test_classify_override_elevates_open_firewall_to_critical():
+    finding = {
+        "findingId": "override",
+        "findingClass": "MISCONFIGURATION",
+        "category": "FIREWALL_OPEN",
+        "severity": "MEDIUM",
+        "resource": "projects/test/firewalls/allow-all",
     }
     assert classify_finding(finding) == "CRITICAL"
 

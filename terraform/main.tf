@@ -127,6 +127,32 @@ resource "google_vpc_access_connector" "securevault" {
 }
 
 #-------------------------------------------------------------------------------
+# Cloud Router + NAT for controlled egress from the VPC connector subnet
+#-------------------------------------------------------------------------------
+resource "google_compute_router" "securevault" {
+  name    = "securevault-router"
+  region  = var.region
+  network = google_compute_network.securevault.id
+
+  labels = local.common_labels
+}
+
+resource "google_compute_router_nat" "securevault" {
+  name                               = "securevault-nat"
+  router                             = google_compute_router.securevault.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
+
+  depends_on = [google_compute_router.securevault]
+}
+
+#-------------------------------------------------------------------------------
 # Service account for the Cloud Function
 # Least-privilege: no project editor/owner, only required roles.
 #-------------------------------------------------------------------------------
@@ -282,13 +308,14 @@ resource "google_cloudfunctions2_function" "scc_processor" {
   }
 
   service_config {
-    available_memory      = "256M"
-    timeout_seconds       = 60
-    max_instance_count    = 10
-    min_instance_count    = 0
-    ingress_settings      = "ALLOW_INTERNAL_ONLY"
-    service_account_email = google_service_account.scc_processor.email
-    vpc_connector         = google_vpc_access_connector.securevault.id
+    available_memory              = "256M"
+    timeout_seconds               = 60
+    max_instance_count            = 10
+    min_instance_count            = 0
+    ingress_settings              = "ALLOW_INTERNAL_ONLY"
+    vpc_connector_egress_settings = "ALL_TRAFFIC"
+    service_account_email         = google_service_account.scc_processor.email
+    vpc_connector                 = google_vpc_access_connector.securevault.id
 
     environment_variables = {
       PROJECT_ID       = var.project_id

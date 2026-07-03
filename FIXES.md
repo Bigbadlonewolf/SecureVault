@@ -36,9 +36,10 @@ This document records the defects resolved and the production-grade hardening ap
 
 - Added `google_compute_network.securevault` with `auto_create_subnetworks = false`.
 - Added `google_compute_subnetwork.securevault` (`10.0.0.0/28`) with flow logs, `private_ip_google_access`, and `private_ipv6_google_access`.
-- Added `google_compute_router` + `google_compute_router_nat` for Cloud NAT egress.
+- Added `google_compute_router.securevault` + `google_compute_router_nat.securevault` for Cloud NAT egress.
 - Added `google_compute_firewall.deny_all_ingress` default-deny rule.
 - Added `google_vpc_access_connector.securevault` and attached it to the Cloud Function.
+- Set `vpc_connector_egress_settings = "ALL_TRAFFIC"` so all function egress traverses the VPC and NAT.
 
 ---
 

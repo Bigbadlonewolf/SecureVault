@@ -9,15 +9,17 @@ from typing import Any, Callable, Dict, List, Optional
 
 from google.cloud import compute_v1, resourcemanager_v3, storage
 
+from scc_processor.processors.classifier import _extract_finding_class
 from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 
 # Finding classes eligible for auto-remediation.
+# OVER_PRIVILEGED_SA is intentionally excluded: SCC does not identify the
+# specific excessive role, so unattended revocation of all roles is unsafe.
 _AUTO_REMEDIATION_CLASSES = {
     "PUBLIC_BUCKET_ACL": "remove_public_bucket_access",
     "OPEN_FIREWALL": "disable_open_firewall_rule",
-    "OVER_PRIVILEGED_SA": "remove_excess_service_account_roles",
 }
 
 
@@ -30,7 +32,7 @@ def remediate(finding: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         A dictionary describing the action taken and its status.
     """
-    finding_class = str(finding.get("findingClass", "")).upper()
+    finding_class = _extract_finding_class(finding)
     if finding_class not in _AUTO_REMEDIATION_CLASSES:
         return {
             "action": "NONE",

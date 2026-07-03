@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from scc_processor.processors.classifier import classify_finding
+from scc_processor.processors.classifier import classify_finding, _extract_finding_class
 from scc_processor.processors.notifier import send_alert
 from scc_processor.processors.remediator import remediate
 from scc_processor.storage.bigquery_client import stream_finding
@@ -38,7 +38,7 @@ def process_scc_finding(event: Dict[str, Any], context: Any) -> str:
     finding_id = finding.get("findingId", "unknown")
     resource = finding.get("resource", "unknown")
     resource_type = finding.get("resourceType", "unknown")
-    finding_class = finding.get("findingClass", "UNKNOWN")
+    finding_class = _extract_finding_class(finding)
     project_id = finding.get("projectId", os.environ.get("PROJECT_ID", "unknown"))
 
     # Attach correlation ID to all downstream log records.

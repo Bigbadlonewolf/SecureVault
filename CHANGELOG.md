@@ -6,6 +6,11 @@
 - Updated `actions/checkout` to `v4.2.2` and `actions/setup-python` to `v5.4.0` in `.github/workflows/ci.yml` to eliminate Node.js 20 deprecation annotations in the `python-tests` and `security-scan` jobs.
 - Removed the `github.event_name == 'pull_request'` guard from the `terraform-plan` job so Terraform planning runs on both `push` and `pull_request` events in the canonical repository, resolving the previously reported 0s step duration.
 - Ensured the `terraform-plan` job explicitly runs `terraform init`, `terraform validate`, and `terraform plan` from the `./terraform` working directory with visible stdout output.
+- Fixed SCC finding-class routing: `main.py`, `remediator.py`, and `notifier.py` now derive the internal finding class through `classifier._extract_finding_class()`, which maps real SCC `category` values instead of relying on the generic `findingClass` enum.
+- Rebuilt all test fixtures and `scripts/simulate_finding.py` to use the real SCC schema (`findingClass: MISCONFIGURATION` + a realistic `category`).
+- Removed `OVER_PRIVILEGED_SA` from auto-remediation; it is now alert-only because SCC does not identify the specific excessive role.
+- Implemented the missing Cloud Router + NAT resources in `terraform/main.tf` and pinned `vpc_connector_egress_settings = "ALL_TRAFFIC"` so function egress is actually routed through the VPC.
+- Updated `FIXES.md` to match the implemented Terraform egress controls.
 
 ## [0.1.0] - 2026-07-02
 

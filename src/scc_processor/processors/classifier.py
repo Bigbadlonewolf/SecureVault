@@ -17,6 +17,16 @@ _SCC_SEVERITY_MAP = {
     "SEVERITY_UNSPECIFIED": "MEDIUM",
 }
 
+# Real SCC findings use fixed findingClass enums (e.g. MISCONFIGURATION) and put
+# the specific detector name in category. Map known categories to the internal
+# finding classes used by the response matrix and remediator.
+_CATEGORY_CLASS_MAP = {
+    "STORAGE_BUCKET_PUBLIC": "PUBLIC_BUCKET_ACL",
+    "FIREWALL_OPEN": "OPEN_FIREWALL",
+    "PRIVILEGED_SERVICE_ACCOUNT": "OVER_PRIVILEGED_SA",
+    "PRIVILEGE_ESCALATION": "OVER_PRIVILEGED_SA",
+}
+
 
 def classify_finding(finding: Dict[str, Any]) -> str:
     """Classify an SCC finding into a SecureVault severity level.
@@ -39,18 +49,24 @@ def classify_finding(finding: Dict[str, Any]) -> str:
 
 
 def _extract_finding_class(finding: Dict[str, Any]) -> str:
-    """Derive a normalized finding class from the SCC finding payload."""
+    """Derive a normalized finding class from the SCC finding payload.
+
+    SCC uses fixed findingClass enums such as MISCONFIGURATION, THREAT, etc.
+    The actionable detector name lives in category, so category is checked
+    first. If the category is unknown, fall back to findingClass, then to the
+    raw category string.
+    """
     category = finding.get("category", "")
     finding_class = finding.get("findingClass", "")
-    if finding_class:
-        return str(finding_class).upper()
 
-    # Map common SCC categories to internal finding classes.
     category_upper = str(category).upper()
-    if "BUCKET" in category_upper or "STORAGE" in category_upper:
-        return "PUBLIC_BUCKET_ACL"
-    if "FIREWALL" in category_upper:
-        return "OPEN_FIREWALL"
-    if "PRIVILEGE" in category_upper or "IAM" in category_upper:
-        return "OVER_PRIVILEGED_SA"
+    if category_upper in _CATEGORY_CLASS_MAP:
+        return _CATEGORY_CLASS_MAP[category_upper]
+
+    # Legacy / simulated findings may set findingClass directly.
+    if finding_class:
+        finding_class_upper = str(finding_class).upper()
+        if finding_class_upper not in {"MISCONFIGURATION", "THREAT", "VULNERABILITY", "OBSERVATION", "SCC_ERROR", "POSTURE_VIOLATION", "TOXIC_COMBINATION"}:
+            return finding_class_upper
+
     return category_upper

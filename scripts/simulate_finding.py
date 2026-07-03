@@ -26,10 +26,13 @@ def _sample_finding(finding_class: str, severity: str) -> Dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     project = os.environ.get("PROJECT_ID", "unknown-project")
 
+    # Real SCC findings set findingClass to a fixed enum (e.g. MISCONFIGURATION)
+    # and put the specific detector name in category. Templates below use the
+    # internal --finding-class value only to select the realistic shape.
     templates = {
         "PUBLIC_BUCKET_ACL": {
             "findingId": f"{finding_class}-{now}",
-            "findingClass": finding_class,
+            "findingClass": "MISCONFIGURATION",
             "category": "STORAGE_BUCKET_PUBLIC",
             "severity": severity,
             "resource": f"gs://{project}-public-bucket",
@@ -40,7 +43,7 @@ def _sample_finding(finding_class: str, severity: str) -> Dict[str, Any]:
         },
         "OPEN_FIREWALL": {
             "findingId": f"{finding_class}-{now}",
-            "findingClass": finding_class,
+            "findingClass": "MISCONFIGURATION",
             "category": "FIREWALL_OPEN",
             "severity": severity,
             "resource": f"projects/{project}/firewalls/allow-all-ssh",
@@ -51,7 +54,7 @@ def _sample_finding(finding_class: str, severity: str) -> Dict[str, Any]:
         },
         "OVER_PRIVILEGED_SA": {
             "findingId": f"{finding_class}-{now}",
-            "findingClass": finding_class,
+            "findingClass": "MISCONFIGURATION",
             "category": "PRIVILEGED_SERVICE_ACCOUNT",
             "severity": severity,
             "resource": f"projects/{project}/serviceAccounts/overprivileged@{project}.iam.gserviceaccount.com",
@@ -68,8 +71,8 @@ def _sample_finding(finding_class: str, severity: str) -> Dict[str, Any]:
     # Generic fallback for classes like DLP, UNUSED_SERVICE_ACCOUNT, etc.
     return {
         "findingId": f"{finding_class}-{now}",
-        "findingClass": finding_class,
-        "category": "SIMULATED",
+        "findingClass": "MISCONFIGURATION",
+        "category": finding_class,
         "severity": severity,
         "resource": f"projects/{project}/simulated/{finding_class.lower()}",
         "resourceType": "cloudresourcemanager.googleapis.com/Project",

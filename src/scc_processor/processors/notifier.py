@@ -9,6 +9,7 @@ from typing import Any, Dict
 
 import requests
 
+from scc_processor.processors.classifier import _extract_finding_class
 from scc_processor.utils.config_loader import load_config
 from scc_processor.utils.logger import get_logger
 
@@ -43,7 +44,7 @@ def send_alert(finding: Dict[str, Any], action_result: Dict[str, Any]) -> bool:
             return False
 
         severity = finding.get("severity", "UNKNOWN")
-        finding_class = finding.get("findingClass", "UNKNOWN")
+        finding_class = _extract_finding_class(finding)
         resource = finding.get("resource", "UNKNOWN")
 
         subject = f"[SecureVault] {severity}: {finding_class} on {resource}"

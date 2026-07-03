@@ -14,7 +14,8 @@ from scc_processor.processors.remediator import remediate
 def test_unmapped_critical_returns_skipped_unmapped():
     finding = {
         "findingId": "unmapped",
-        "findingClass": "UNKNOWN_CRITICAL",
+        "findingClass": "MISCONFIGURATION",
+        "category": "UNKNOWN_CRITICAL",
         "severity": "CRITICAL",
         "resource": "projects/test/resources/unknown",
     }
@@ -38,7 +39,8 @@ def test_public_bucket_acl_handler_removes_public_members(mock_storage, env_vars
 
     finding = {
         "findingId": "public-bucket",
-        "findingClass": "PUBLIC_BUCKET_ACL",
+        "findingClass": "MISCONFIGURATION",
+        "category": "STORAGE_BUCKET_PUBLIC",
         "severity": "CRITICAL",
         "resource": "gs://public-bucket",
     }
@@ -65,7 +67,8 @@ def test_open_firewall_handler_disables_permissive_rule(mock_compute, env_vars):
 
     finding = {
         "findingId": "open-firewall",
-        "findingClass": "OPEN_FIREWALL",
+        "findingClass": "MISCONFIGURATION",
+        "category": "FIREWALL_OPEN",
         "severity": "CRITICAL",
         "resource": "projects/test/firewalls/allow-all-ssh",
     }
@@ -82,7 +85,8 @@ def test_handler_error_returns_failure_status(mock_storage, env_vars):
 
     finding = {
         "findingId": "public-bucket-fail",
-        "findingClass": "PUBLIC_BUCKET_ACL",
+        "findingClass": "MISCONFIGURATION",
+        "category": "STORAGE_BUCKET_PUBLIC",
         "severity": "CRITICAL",
         "resource": "gs://public-bucket",
     }
@@ -90,3 +94,17 @@ def test_handler_error_returns_failure_status(mock_storage, env_vars):
 
     assert result["status"] == "FAILURE"
     assert "error" in result
+
+
+def test_over_privileged_sa_is_not_auto_remediated():
+    finding = {
+        "findingId": "overpriv-sa",
+        "findingClass": "MISCONFIGURATION",
+        "category": "PRIVILEGED_SERVICE_ACCOUNT",
+        "severity": "CRITICAL",
+        "resource": "projects/test/serviceAccounts/overpriv@test.iam.gserviceaccount.com",
+    }
+    result = remediate(finding)
+
+    assert result["status"] == "SKIPPED_UNMAPPED"
+    assert result["action"] == "NONE"

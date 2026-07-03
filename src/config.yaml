@@ -6,7 +6,8 @@ response_matrix:
     auto_remediate:
       - PUBLIC_BUCKET_ACL
       - OPEN_FIREWALL
-      - OVER_PRIVILEGED_SA
+      # OVER_PRIVILEGED_SA is alert-only: SCC does not identify the specific
+      # excessive role, so unattended role revocation is unsafe.
     default_action: alert_only
   HIGH:
     action: alert
