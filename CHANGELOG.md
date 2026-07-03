@@ -11,6 +11,7 @@
 - Removed `OVER_PRIVILEGED_SA` from auto-remediation; it is now alert-only because SCC does not identify the specific excessive role.
 - Implemented the missing Cloud Router + NAT resources in `terraform/main.tf` and pinned `vpc_connector_egress_settings = "ALL_TRAFFIC"` so function egress is actually routed through the VPC.
 - Updated `FIXES.md` to match the implemented Terraform egress controls.
+- Gated Terraform Plan in `.github/workflows/ci.yml` on the presence of `secrets.GCP_TERRAFORM_SA_KEY` so `fmt`, `init`, and `validate` still run when the credential is absent, while `plan` and the PR comment are skipped cleanly with an explicit log message.
 
 ## [0.1.0] - 2026-07-02
 
