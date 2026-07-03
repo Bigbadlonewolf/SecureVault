@@ -17,11 +17,11 @@ This document records the defects resolved and the production-grade hardening ap
 
 ---
 
-## 2. CI: Checkov SARIF Upload
+## 2. CI: Consolidated Security Scanning
 
-**Defect:** Checkov results were not surfaced in the GitHub Security tab.
+**Defect:** Checkov results were not surfaced in the GitHub Security tab, and security scanning was split between `ci.yml` and a redundant `security-scan.yml` that created duplicate runs and conflicting status checks.
 
-**Fix:** Added a Checkov SARIF output step and `github/codeql-action/upload-sarif@v3` to upload results.
+**Fix:** Removed the redundant `security-scan.yml` and kept Checkov enforcement in the consolidated `ci.yml` security job. Tool versions are now pinned (`bandit==1.7.9`, `pip-audit==2.7.3`, `checkov-action@v12`, `trufflehog@v3.80.1`) for deterministic builds. SARIF upload was dropped in favor of a single, enforceable security gate.
 
 ---
 
@@ -115,7 +115,8 @@ This document records the defects resolved and the production-grade hardening ap
 
 ## Files Modified
 
-- `.github/workflows/security-scan.yml`
+- `.github/workflows/ci.yml` (consolidated security scanning, pinned tool versions)
+- `.github/workflows/deploy.yml` (real Checks API verification gate)
 - `terraform/main.tf`
 - `terraform/variables.tf`
 - `terraform/outputs.tf`

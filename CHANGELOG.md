@@ -12,6 +12,9 @@
 - Implemented the missing Cloud Router + NAT resources in `terraform/main.tf` and pinned `vpc_connector_egress_settings = "ALL_TRAFFIC"` so function egress is actually routed through the VPC.
 - Updated `FIXES.md` to match the implemented Terraform egress controls.
 - Gated Terraform Plan in `.github/workflows/ci.yml` on the presence of `secrets.GCP_TERRAFORM_SA_KEY` so `fmt`, `init`, and `validate` still run when the credential is absent, while `plan` and the PR comment are skipped cleanly with an explicit log message.
+- Consolidated CI/CD workflows: deleted redundant `.github/workflows/security-scan.yml` and zombie `.github/workflows/terraform-plan.yml`; all CI now runs through `.github/workflows/ci.yml`.
+- Pinned CI tool versions for deterministic builds: `bandit==1.7.9`, `pip-audit==2.7.3`, `pytest==8.2.2`, `bridgecrewio/checkov-action@v12`, `trufflesecurity/trufflehog@v3.80.1`.
+- Replaced the fake `verify` job in `.github/workflows/deploy.yml` with a real GitHub Checks API query that fails deployment if any check on the latest `main` commit is red.
 
 ## [0.1.0] - 2026-07-02
 

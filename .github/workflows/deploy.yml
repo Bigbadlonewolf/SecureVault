@@ -13,13 +13,43 @@ on:
 
 jobs:
   verify:
+    name: Verify CI Status on Latest Main
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
     steps:
-      - name: Verify latest main branch security scans passed
+      - name: Query Checks API for latest main commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Ensure the latest commit on main has green Security Scan and Terraform Plan checks before deploying."
+          set -euo pipefail
+
+          REPO="${{ github.repository }}"
+          LATEST_SHA=$(gh api "repos/${REPO}/commits/main" --jq '.sha')
+          echo "Latest main SHA: ${LATEST_SHA}"
+
+          CHECKS_JSON=$(gh api "repos/${REPO}/commits/${LATEST_SHA}/check-runs" --jq '.check_runs')
+
+          FAILED_CHECKS=$(echo "$CHECKS_JSON" | jq -r '[.[] | select(.conclusion == "failure") | .name] | .[]')
+
+          if [ -n "$FAILED_CHECKS" ]; then
+            echo "::error::The following required checks failed on main (${LATEST_SHA}):"
+            echo "$FAILED_CHECKS"
+            exit 1
+          fi
+
+          PENDING_CHECKS=$(echo "$CHECKS_JSON" | jq -r '[.[] | select(.status != "completed") | .name] | .[]')
+          if [ -n "$PENDING_CHECKS" ]; then
+            echo "::warning::The following checks are still pending on main (${LATEST_SHA}):"
+            echo "$PENDING_CHECKS"
+            echo "Proceeding with caution..."
+          fi
+
+          echo "All completed checks passed for ${LATEST_SHA}. Deployment authorized."
 
   deploy:
+    name: Deploy to GCP
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -28,7 +58,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
