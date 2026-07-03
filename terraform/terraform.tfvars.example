@@ -1,0 +1,14 @@
+project_id = "mythical-cider-496423-h6"
+region     = "us-central1"
+
+# Firestore location. Use a regional value that matches your region or a multi-region like nam5.
+firestore_location = "nam5"
+
+# BigQuery dataset location.
+bigquery_location = "US"
+
+# Email address that will receive Brevo alerts and Cloud Monitoring notifications.
+alert_email = "CHANGEME_ALERT_EMAIL@example.com"
+
+# SCC notification service account. Replace {project_number} with your GCP project number.
+scc_notification_service_account = "service-{project_number}@gcp-sa-scc-notification.iam.gserviceaccount.com"

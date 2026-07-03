@@ -1,0 +1,62 @@
+[
+  {
+    "name": "finding_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unique identifier of the SCC finding"
+  },
+  {
+    "name": "timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Time the finding was processed"
+  },
+  {
+    "name": "resource_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "GCP resource type affected by the finding"
+  },
+  {
+    "name": "resource_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Full resource name of the affected asset"
+  },
+  {
+    "name": "severity",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Finding severity: CRITICAL, HIGH, MEDIUM"
+  },
+  {
+    "name": "finding_class",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Mapped finding class for response routing"
+  },
+  {
+    "name": "action",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Action taken: REMEDIATE, ALERT, LOG"
+  },
+  {
+    "name": "project_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "GCP project ID where the finding originated"
+  },
+  {
+    "name": "status",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Outcome status: SUCCESS, FAILURE, SKIPPED"
+  },
+  {
+    "name": "error",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Error message if the action failed"
+  }
+]
