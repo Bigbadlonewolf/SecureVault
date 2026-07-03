@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -64,8 +66,8 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: main
-          head: HEAD
+          base: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+          head: ${{ github.event_name == 'pull_request' && github.head_ref || 'HEAD' }}
           extra_args: --only-verified
 
   terraform:

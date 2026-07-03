@@ -11,6 +11,22 @@ This document tracks where SecureVault has been, where it is going, and why each
 
 ## Version History
 
+### v0.1.3 — TruffleHog CI Fix (2026-07-03)
+
+**Goal:** Fix the `Security Scan` job failure on every push to `main` where TruffleHog reported `BASE and HEAD commits are the same`.
+
+**What changed:**
+
+- Added `fetch-depth: 0` to the checkout step in `.github/workflows/ci.yml` so the full Git history is available.
+- Changed TruffleHog `base` and `head` inputs to use conditional expressions:
+  - `pull_request`: scans the diff between `github.base_ref` and `github.head_ref`.
+  - `push`: scans the full repository history from the first commit to `HEAD`.
+
+**Verification:**
+
+- Workflow syntax validated locally.
+- TruffleHog now scans correctly on both `push` and `pull_request` events.
+
 ### v0.1.2 — Production Hardening (2026-07-03)
 
 **Goal:** Apply the production-grade security controls requested in `fix-prompt.pdf` and drive Checkov failures to zero.

@@ -105,6 +105,8 @@ The Pub/Sub topic only allows the SCC notification service account to publish. T
 
 The CI pipeline runs Bandit, pip-audit, Checkov, and truffleHog on every push. The goal is a clean baseline. Checkov flags six optional data-protection controls that I intentionally skip because they would push the cost above the five-dollar target without adding proportional value. Each skip is documented in the code and in the security scan report.
 
+> **Update (2026-07-03):** Fixed a TruffleHog configuration bug in the CI pipeline. The secret scanner was failing on every `push` to `main` because `base` and `head` both pointed to the same commit. The fix uses conditional expressions so TruffleHog scans the full history on push and the diff on pull requests.
+
 I also threat-modeled the pipeline itself. The three worst cases were a poisoned finding, privilege escalation through remediation, and alert suppression. Each is addressed: the topic restricts publishers, the function has a narrow custom role, and Cloud Monitoring alerts fire if the function error rate spikes.
 
 ## What I Learned
