@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.11'
 
@@ -36,12 +36,12 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.11'
 
@@ -73,14 +73,14 @@ jobs:
   terraform:
     name: Terraform Plan
     runs-on: ubuntu-latest
-    # Only run the Terraform plan in the canonical repo where GCP secrets are configured.
-    if: github.event_name == 'pull_request' && github.repository == 'Bigbadlonewolf/SecureVault'
+    # Only run in the canonical repo where GCP secrets are configured.
+    if: github.repository == 'Bigbadlonewolf/SecureVault'
     permissions:
       contents: read
       pull-requests: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3

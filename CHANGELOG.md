@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Updated `actions/checkout` to `v4.2.2` and `actions/setup-python` to `v5.4.0` in `.github/workflows/ci.yml` to eliminate Node.js 20 deprecation annotations in the `python-tests` and `security-scan` jobs.
+- Removed the `github.event_name == 'pull_request'` guard from the `terraform-plan` job so Terraform planning runs on both `push` and `pull_request` events in the canonical repository, resolving the previously reported 0s step duration.
+- Ensured the `terraform-plan` job explicitly runs `terraform init`, `terraform validate`, and `terraform plan` from the `./terraform` working directory with visible stdout output.
+
 ## [0.1.0] - 2026-07-02
 
 ### Added
