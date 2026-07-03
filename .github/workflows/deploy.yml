@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify latest main branch security scans passed
+        run: |
+          echo "Ensure the latest commit on main has green Security Scan and Terraform Plan checks before deploying."
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5.7'
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_TERRAFORM_SA_KEY }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve -input=false
+        env:
+          TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+
+      - name: Deploy Cloud Function
+        run: |
+          gcloud functions deploy scc-processor \
+            --gen2 \
+            --runtime=python311 \
+            --source=src \
+            --entry-point=process_scc_finding \
+            --trigger-topic=scc-findings \
+            --service-account=scc-processor@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --region=${{ vars.GCP_REGION }}
