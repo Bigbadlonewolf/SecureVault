@@ -23,13 +23,8 @@ def base_finding():
     }
 
 
-@patch("scc_processor.processors.notifier.secretmanager")
 @patch("scc_processor.processors.notifier.requests")
-def test_email_payload_format(mock_requests, mock_secretmanager, base_finding, env_vars):
-    secret_client = MagicMock()
-    secret_client.access_secret_version.return_value.payload.data = b"fake-api-key"
-    mock_secretmanager.SecretManagerServiceClient.return_value = secret_client
-
+def test_email_payload_format(mock_requests, base_finding, env_vars):
     response = MagicMock()
     response.status_code = 201
     response.raise_for_status.return_value = None
@@ -46,13 +41,8 @@ def test_email_payload_format(mock_requests, mock_secretmanager, base_finding, e
     assert "SUCCESS" in payload["textContent"]
 
 
-@patch("scc_processor.processors.notifier.secretmanager")
 @patch("scc_processor.processors.notifier.requests")
-def test_brevo_failure_returns_false(mock_requests, mock_secretmanager, base_finding, env_vars):
-    secret_client = MagicMock()
-    secret_client.access_secret_version.return_value.payload.data = b"fake-api-key"
-    mock_secretmanager.SecretManagerServiceClient.return_value = secret_client
-
+def test_brevo_failure_returns_false(mock_requests, base_finding, env_vars):
     mock_requests.RequestException = real_requests.exceptions.RequestException
     mock_requests.post.side_effect = real_requests.exceptions.RequestException("Brevo timeout")
 
@@ -60,13 +50,8 @@ def test_brevo_failure_returns_false(mock_requests, mock_secretmanager, base_fin
     assert send_alert(base_finding, action_result) is False
 
 
-@patch("scc_processor.processors.notifier.secretmanager")
 @patch("scc_processor.processors.notifier.requests")
-def test_secret_manager_key_retrieval(mock_requests, mock_secretmanager, base_finding, env_vars):
-    secret_client = MagicMock()
-    secret_client.access_secret_version.return_value.payload.data = b"retrieved-key"
-    mock_secretmanager.SecretManagerServiceClient.return_value = secret_client
-
+def test_api_key_read_from_environment(mock_requests, base_finding, env_vars):
     response = MagicMock()
     response.status_code = 201
     response.raise_for_status.return_value = None
@@ -75,24 +60,25 @@ def test_secret_manager_key_retrieval(mock_requests, mock_secretmanager, base_fi
     send_alert(base_finding, {"action": "ALERT", "status": "SUCCESS"})
 
     headers = mock_requests.post.call_args.kwargs["headers"]
-    assert headers["api-key"] == "retrieved-key"
+    assert headers["api-key"] == "fake-brevo-api-key"
 
 
-@patch("scc_processor.processors.notifier.secretmanager")
 @patch("scc_processor.processors.notifier.requests")
-def test_missing_alert_email_returns_false(mock_requests, mock_secretmanager, base_finding, monkeypatch):
+def test_missing_alert_email_returns_false(mock_requests, base_finding, monkeypatch):
     monkeypatch.delenv("ALERT_EMAIL", raising=False)
     assert send_alert(base_finding, {"action": "ALERT", "status": "SUCCESS"}) is False
     mock_requests.post.assert_not_called()
 
 
-@patch("scc_processor.processors.notifier.secretmanager")
 @patch("scc_processor.processors.notifier.requests")
-def test_subject_contains_severity_and_finding_class(mock_requests, mock_secretmanager, base_finding, env_vars):
-    secret_client = MagicMock()
-    secret_client.access_secret_version.return_value.payload.data = b"fake-api-key"
-    mock_secretmanager.SecretManagerServiceClient.return_value = secret_client
+def test_missing_brevo_key_returns_false(mock_requests, base_finding, monkeypatch):
+    monkeypatch.delenv("BREVO_API_KEY", raising=False)
+    assert send_alert(base_finding, {"action": "ALERT", "status": "SUCCESS"}) is False
+    mock_requests.post.assert_not_called()
 
+
+@patch("scc_processor.processors.notifier.requests")
+def test_subject_contains_severity_and_finding_class(mock_requests, base_finding, env_vars):
     response = MagicMock()
     response.status_code = 201
     response.raise_for_status.return_value = None

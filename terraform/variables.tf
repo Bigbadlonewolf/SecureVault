@@ -29,3 +29,15 @@ variable "alert_email" {
   type        = string
 }
 
+variable "environment" {
+  description = "Environment label applied to all resources (e.g., production, staging)"
+  type        = string
+  default     = "production"
+}
+
+variable "kms_key_rotation_period" {
+  description = "Rotation period for the Cloud KMS CMEK key in seconds (90 days = 7776000s)"
+  type        = string
+  default     = "7776000s"
+}
+

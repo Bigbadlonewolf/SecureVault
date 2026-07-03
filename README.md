@@ -138,6 +138,8 @@ Target monthly cost is **under $5**, with a hard ceiling of **$20/month** and a 
 
 At 10,000 findings/month with an average execution time of **2 seconds**, the workload still sits within the Cloud Functions Gen 2 free tier, so compute cost remains **$0**. A detailed, GB-second–verified model with sensitivity analysis is in [`context/COST_ANALYSIS.md`](context/COST_ANALYSIS.md).
 
+> **Cost model update:** The v0.1.2 hardening pass added VPC, Cloud NAT, Cloud KMS, access logging, and additional monitoring. These controls intentionally exceed the original under-\$5 demo target in favor of production-grade security. The `$20/month` ceiling and billing alert at `$15/month` remain in place.
+
 ---
 
 ## Quick Start
@@ -182,7 +184,8 @@ See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for a fresh-GCP-proje
 - **No secrets are stored in source code.** Sensitive values live in Secret Manager.
 - **Least-privilege IAM.** The Cloud Function runs under a dedicated service account with a custom remediation role.
 - **Publisher-restricted Pub/Sub topic.** Only the SCC notification service account can publish to `scc-findings`.
-- **All source passes** `bandit`, `pip-audit`, `Checkov`, and `truffleHog` scans in CI.
+- **All source passes** `bandit`, `pip-audit`, `Checkov` (62 passed, 0 failed, 1 documented skip), and `truffleHog` scans in CI. See `CHECKOV_SKIP.md` for the single intentional skip.
+- **Production hardening added:** VPC with Cloud NAT, CMEK via Cloud KMS, access logging, deletion protection, secret environment variables, and ingress restricted to internal-only.
 
 ### Known Risks in v0.1.0
 
@@ -224,6 +227,7 @@ See [`SECURITY.md`](SECURITY.md) and [`context/THREAT_MODEL.md`](context/THREAT_
 | [`context/COMPLIANCE_MAPPING.md`](context/COMPLIANCE_MAPPING.md) | NIST, PCI DSS, and SOC 2 mappings |
 | [`context/COST_ANALYSIS.md`](context/COST_ANALYSIS.md) | GB-second–verified cost model and sensitivity analysis |
 | [`EVOLUTION.md`](EVOLUTION.md) | Version history and Phase 2 roadmap |
+| [`CHECKOV_SKIP.md`](CHECKOV_SKIP.md) | Intentional Checkov skips with risk acceptance |
 | [`CONTRIBUTION.md`](CONTRIBUTION.md) | How to contribute, test, and report issues |
 | [`adr/`](adr/) | Architecture Decision Records |
 

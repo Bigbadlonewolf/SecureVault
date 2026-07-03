@@ -110,6 +110,8 @@ At normal scale, the free tier absorbs virtually all function cost.
 
 Even at **1,000,000 findings/month**, the workload stays near the $5 target before any optimization. The $20/month ceiling provides headroom for retry storms, temporary log spikes, or regional pricing differences.
 
+> **Cost model update:** The v0.1.2 hardening pass added VPC, Cloud NAT, Cloud KMS (CMEK), a dedicated access-log bucket, and additional Cloud Monitoring alerts. These controls intentionally exceed the original under-\$5 demo target in favor of production-grade security. The `$20/month` ceiling and billing alert at `$15/month` remain in place.
+
 ---
 
 ## Sensitivity Analysis

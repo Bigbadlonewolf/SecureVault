@@ -101,7 +101,8 @@ def process_scc_finding(event: Dict[str, Any], context: Any) -> str:
         "Finding processing complete",
         extra={
             **extra,
-            "severity": severity,
+            "finding_severity": severity,
+            "finding_class": finding_class,
             "action": action_result.get("action", "NONE"),
             "status": action_result.get("status", "UNKNOWN"),
             "alert_sent": alert_sent,

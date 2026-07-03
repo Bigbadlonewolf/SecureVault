@@ -1,8 +1,10 @@
 name: Security Scan
 
-# This workflow is now part of the unified CI pipeline in ci.yml.
-# It remains available for manual invocation when needed.
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -12,8 +14,12 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - name: Checkout code
+      - name: Checkout code with enough history for TruffleHog
         uses: actions/checkout@v4
+        with:
+          # Pull enough commits so TruffleHog has a meaningful diff.
+          # push: commits in push + 2 ; pull_request: PR commits + 2
+          fetch-depth: ${{ github.event_name == 'pull_request' && github.event.pull_request.commits + 2 || 0 }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,18 +35,38 @@ jobs:
       - name: Run pip-audit
         run: pip-audit -r src/requirements.txt --desc
 
-      - name: Run Checkov on Terraform
+      - name: Run Checkov on Terraform and upload SARIF
         uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform/
           framework: terraform
+          output_format: sarif
+          output_file_path: reports/checkov.sarif
+          soft_fail: true
           quiet: true
-          soft_fail: false
+
+      - name: Upload Checkov SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/checkov.sarif
+
+      - name: Determine TruffleHog base and head
+        id: trufflehog_refs
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            # Full branch scan on push
+            echo "base=" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run truffleHog secret scan
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: main
-          head: HEAD
-          extra_args: --only-verified
+          base: ${{ steps.trufflehog_refs.outputs.base }}
+          head: ${{ steps.trufflehog_refs.outputs.head }}
+          extra_args: --only-verified --results=verified,unknown

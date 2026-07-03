@@ -11,6 +11,29 @@ This document tracks where SecureVault has been, where it is going, and why each
 
 ## Version History
 
+### v0.1.2 — Production Hardening (2026-07-03)
+
+**Goal:** Apply the production-grade security controls requested in `fix-prompt.pdf` and drive Checkov failures to zero.
+
+**What changed:**
+
+- Added a VPC, subnet, Cloud NAT, and VPC connector; restricted the Cloud Function ingress to `ALLOW_INTERNAL_ONLY`.
+- Added a Cloud KMS key ring and crypto key with 90-day rotation; applied CMEK to Cloud Storage, Pub/Sub, BigQuery dataset, and BigQuery table.
+- Enabled versioning, uniform bucket-level access, public-access prevention, and access logging on the source bucket.
+- Added deletion protection to the KMS key and BigQuery table.
+- Moved the Brevo API key from plain environment variables to `secret_environment_variables`.
+- Added `local.common_labels` to every Terraform resource for ownership/IAM tracking.
+- Added a Cloud Monitoring alert for high-severity SCC findings.
+- Fixed TruffleHog checkout-depth issues and added Checkov SARIF upload in CI.
+- Documented the single remaining intentional Checkov skip in `CHECKOV_SKIP.md`.
+
+**Validation:**
+
+- `pytest -q` — 23 passed
+- `terraform validate` — success
+- `checkov -d terraform/ --framework terraform --quiet` — 62 passed, 0 failed, 1 documented skip
+- `bandit`, `pip-audit`, `truffleHog` — clean
+
 ### v0.1.0 — Initial Release (2026-07-03)
 
 **Goal:** Build a credible, end-to-end detection and response pipeline that can survive a 20-minute technical deep dive by a hiring manager at a financial institution.

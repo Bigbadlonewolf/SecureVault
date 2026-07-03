@@ -8,7 +8,6 @@ import os
 from typing import Any, Dict
 
 import requests
-from google.cloud import secretmanager
 
 from scc_processor.utils.config_loader import load_config
 from scc_processor.utils.logger import get_logger
@@ -110,13 +109,8 @@ This alert was generated automatically by SecureVault.
 
 
 def _get_brevo_api_key() -> str:
-    """Retrieve the Brevo API key from Secret Manager."""
-    secret_id = os.environ.get("BREVO_SECRET_ID", "brevo-api-key")
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        name = f"projects/{os.environ.get('PROJECT_ID')}/secrets/{secret_id}/versions/latest"
-        response = client.access_secret_version(request={"name": name})
-        return response.payload.data.decode("utf-8").strip()
-    except Exception as exc:  # pylint: disable=broad-except
-        _logger.error("Failed to retrieve Brevo API key from Secret Manager", extra={"error": str(exc)})
-        return ""
+    """Return the Brevo API key injected by Cloud Functions secret_environment_variables."""
+    api_key = os.environ.get("BREVO_API_KEY", "")
+    if not api_key:
+        _logger.error("BREVO_API_KEY environment variable is not set")
+    return api_key

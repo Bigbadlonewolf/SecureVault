@@ -31,6 +31,7 @@ def env_vars(monkeypatch):
     monkeypatch.setenv("PROJECT_ID", "mythical-cider-496423-h6")
     monkeypatch.setenv("ALERT_EMAIL", "Lanreoluokunigbadwolf@gmail.com")
     monkeypatch.setenv("BREVO_SECRET_ID", "brevo-api-key")
+    monkeypatch.setenv("BREVO_API_KEY", "fake-brevo-api-key")
     monkeypatch.setenv("BIGQUERY_DATASET", "securevault_analytics")
     monkeypatch.setenv("BIGQUERY_TABLE", "findings_history")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")

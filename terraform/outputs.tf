@@ -40,3 +40,23 @@ output "remediation_custom_role" {
   description = "Custom IAM role used for auto-remediation actions"
   value       = google_project_iam_custom_role.remediation.id
 }
+
+output "kms_key" {
+  description = "Cloud KMS CMEK key used for bucket and Pub/Sub encryption"
+  value       = google_kms_crypto_key.securevault.id
+}
+
+output "vpc_connector" {
+  description = "VPC connector assigned to the Cloud Function"
+  value       = google_vpc_access_connector.securevault.id
+}
+
+output "secret_brevo_api_key" {
+  description = "Secret Manager secret ID for the Brevo API key"
+  value       = google_secret_manager_secret.brevo_api_key.secret_id
+}
+
+output "source_bucket" {
+  description = "Cloud Storage bucket holding the Cloud Function source archive"
+  value       = google_storage_bucket.source.name
+}

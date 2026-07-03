@@ -20,6 +20,112 @@ provider "google" {
   region  = var.region
 }
 
+locals {
+  common_labels = {
+    app         = "securevault"
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+}
+
+#-------------------------------------------------------------------------------
+# VPC for private Cloud Function egress
+#-------------------------------------------------------------------------------
+resource "google_compute_network" "securevault" {
+  name                    = "securevault-network"
+  auto_create_subnetworks = false
+  labels                  = local.common_labels
+}
+
+resource "google_compute_firewall" "deny_all_ingress" {
+  name        = "securevault-deny-all-ingress"
+  network     = google_compute_network.securevault.name
+  direction   = "INGRESS"
+  priority    = 1000
+  description = "Default deny-all ingress for the SecureVault VPC"
+
+  deny {
+    protocol = "all"
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+
+  labels = local.common_labels
+}
+
+resource "google_compute_subnetwork" "securevault" {
+  name                       = "securevault-subnet"
+  ip_cidr_range              = "10.0.0.0/28"
+  region                     = var.region
+  network                    = google_compute_network.securevault.id
+  private_ip_google_access   = true
+  private_ipv6_google_access = "ENABLE_OUTBOUND_VM_ACCESS_TO_GOOGLE"
+
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
+
+  labels = local.common_labels
+}
+
+#-------------------------------------------------------------------------------
+# KMS key ring and CMEK key
+#-------------------------------------------------------------------------------
+resource "google_kms_key_ring" "securevault" {
+  name     = "securevault-keyring"
+  location = var.region
+}
+
+resource "google_kms_crypto_key" "securevault" {
+  name            = "securevault-key"
+  key_ring        = google_kms_key_ring.securevault.id
+  rotation_period = var.kms_key_rotation_period
+  purpose         = "ENCRYPT_DECRYPT"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  labels = local.common_labels
+}
+
+# Grant BigQuery service account access to the CMEK key.
+resource "google_kms_crypto_key_iam_member" "bigquery_encrypt_decrypt" {
+  crypto_key_id = google_kms_crypto_key.securevault.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:bq-${data.google_project.project.number}@bigquery-encryption.iam.gserviceaccount.com"
+}
+
+# Grant Cloud Storage service account access to the CMEK key.
+resource "google_kms_crypto_key_iam_member" "storage_encrypt_decrypt" {
+  crypto_key_id = google_kms_crypto_key.securevault.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.project.number}@gs-project-accounts.iam.gserviceaccount.com"
+}
+
+# Grant Pub/Sub service account access to the CMEK key.
+resource "google_kms_crypto_key_iam_member" "pubsub_encrypt_decrypt" {
+  crypto_key_id = google_kms_crypto_key.securevault.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+#-------------------------------------------------------------------------------
+# VPC connector for the Cloud Function
+#-------------------------------------------------------------------------------
+resource "google_vpc_access_connector" "securevault" {
+  name          = "securevault-connector"
+  region        = var.region
+  network       = google_compute_network.securevault.id
+  ip_cidr_range = "10.0.1.0/28"
+  min_instances = 0
+  max_instances = 2
+
+  labels = local.common_labels
+}
+
 #-------------------------------------------------------------------------------
 # Service account for the Cloud Function
 # Least-privilege: no project editor/owner, only required roles.
@@ -29,6 +135,8 @@ resource "google_service_account" "scc_processor" {
   account_id   = "scc-processor"
   display_name = "SecureVault SCC Processor Function"
   description  = "Dedicated runtime identity for the scc-processor Cloud Function"
+
+  labels = local.common_labels
 }
 
 #-------------------------------------------------------------------------------
@@ -36,16 +144,13 @@ resource "google_service_account" "scc_processor" {
 # Cost: first 10 GiB/month free, then ~$40/TiB; 1-day retention keeps cost low.
 #-------------------------------------------------------------------------------
 resource "google_pubsub_topic" "scc_findings" {
-  # checkov:skip=CKV_GCP_83: Risk accepted. CMEK for this topic would require a Cloud KMS key ring/key (~$1/key/month + operations) and key-management overhead that exceeds the $5/month hobby-project target. The topic contains only transient SCC notification messages, uses IAM-restricted publishing (SCC notification SA only), and no sensitive payload data is stored long-term. See context/THREAT_MODEL.md (poisoned-finding scenario) and adr/ADR-007-threat-model-and-trust-boundaries.md.
-  # Cost: ~$0 for low-volume SCC notifications under free tier.
   name = "scc-findings"
 
   message_retention_duration = "86400s" # 1 day (default is 7 days; short retention reduces cost)
 
-  labels = {
-    app     = "securevault"
-    purpose = "scc-notifications"
-  }
+  kms_key_name = google_kms_crypto_key.securevault.id
+
+  labels = local.common_labels
 }
 
 # Restrict publishers to SCC notification service account only.
@@ -59,24 +164,21 @@ resource "google_pubsub_topic_iam_member" "scc_publisher" {
 
 #-------------------------------------------------------------------------------
 # Secret Manager: Brevo API key
-# The secret itself is created here; the version must be added manually after
+# The secret container is created here; the version must be added manually after
 # terraform apply so the key value never enters Terraform state.
-# Cost: ~$0.06 per secret version per month if populated; free tier 6 active versions.
+# Cost: ~$0.06 per active version per month if populated; free tier 6 active versions.
 #-------------------------------------------------------------------------------
 resource "google_secret_manager_secret" "brevo_api_key" {
-  # Cost: ~$0.06/month per active version after free tier.
   secret_id = "brevo-api-key"
 
   replication {
     auto {}
   }
 
-  labels = {
-    app = "securevault"
-  }
+  labels = local.common_labels
 }
 
-# Allow the function service account to access the secret.
+# Allow the function runtime to mount the secret via secret_environment_variables.
 resource "google_secret_manager_secret_iam_member" "function_brevo_accessor" {
   secret_id = google_secret_manager_secret.brevo_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
@@ -87,21 +189,64 @@ resource "google_secret_manager_secret_iam_member" "function_brevo_accessor" {
 # Cloud Storage bucket for Cloud Function source code
 # Cost: ~$0.020/GB/month; source zip is <1 MB.
 #-------------------------------------------------------------------------------
+resource "google_storage_bucket" "source_logs" {
+  #checkov:skip=CKV_GCP_62:This bucket is the access-log destination; requiring it to log itself would create an infinite loop.
+  name          = "${var.project_id}-securevault-source-logs"
+  location      = var.region
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+
+  versioning {
+    enabled = true
+  }
+
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.securevault.id
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_kms_crypto_key_iam_member.storage_encrypt_decrypt,
+  ]
+}
+
+# Cloud Storage access logs are written by Google's analytics service account.
+resource "google_storage_bucket_iam_member" "source_logs_analytics_writer" {
+  bucket = google_storage_bucket.source_logs.name
+  role   = "roles/storage.legacyBucketWriter"
+  member = "serviceAccount:cloud-storage-analytics@google.com"
+}
+
 resource "google_storage_bucket" "source" {
-  # checkov:skip=CKV_GCP_62: Risk accepted. Access logging is disabled because this bucket stores only ephemeral Cloud Function source zip artifacts, not sensitive data. Uniform bucket-level access and public-access prevention are enforced, and the bucket is not exposed to external principals. Enabling access logging would require an additional log bucket and add near-zero-but-non-zero cost; the security value is low for this non-sensitive data. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
-  # checkov:skip=CKV_GCP_78: Risk accepted. Versioning is disabled because source zips are rebuild artifacts. Old versions provide no security value for this non-sensitive bucket, and enabling versioning would increase storage cost for no operational benefit. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
-  # Cost: ~$0.02/GB/month; source zip < 1 MB.
   name          = "${var.project_id}-securevault-source"
   location      = var.region
   force_destroy = true
 
   uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
 
-  public_access_prevention = "enforced"
-
-  labels = {
-    app = "securevault"
+  versioning {
+    enabled = true
   }
+
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.securevault.id
+  }
+
+  logging {
+    log_bucket        = google_storage_bucket.source_logs.name
+    log_object_prefix = "access-logs/"
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_kms_crypto_key_iam_member.storage_encrypt_decrypt,
+    google_storage_bucket_iam_member.source_logs_analytics_writer,
+  ]
 }
 
 #-------------------------------------------------------------------------------
@@ -121,7 +266,6 @@ resource "google_storage_bucket_object" "function_source" {
 }
 
 resource "google_cloudfunctions2_function" "scc_processor" {
-  # Cost: free tier 2M requests/month; 256 MiB memory tier.
   name        = "scc-processor"
   location    = var.region
   description = "SecureVault SCC finding processor"
@@ -144,14 +288,22 @@ resource "google_cloudfunctions2_function" "scc_processor" {
     min_instance_count    = 0
     ingress_settings      = "ALLOW_INTERNAL_ONLY"
     service_account_email = google_service_account.scc_processor.email
+    vpc_connector         = google_vpc_access_connector.securevault.id
+
     environment_variables = {
       PROJECT_ID       = var.project_id
       REGION           = var.region
       ALERT_EMAIL      = var.alert_email
-      BREVO_SECRET_ID  = google_secret_manager_secret.brevo_api_key.secret_id
       BIGQUERY_DATASET = google_bigquery_dataset.analytics.dataset_id
       BIGQUERY_TABLE   = google_bigquery_table.findings_history.table_id
       LOG_LEVEL        = "INFO"
+    }
+
+    secret_environment_variables {
+      key        = "BREVO_API_KEY"
+      project_id = var.project_id
+      secret     = google_secret_manager_secret.brevo_api_key.secret_id
+      version    = "latest"
     }
   }
 
@@ -160,15 +312,10 @@ resource "google_cloudfunctions2_function" "scc_processor" {
     event_type     = "google.cloud.pubsub.topic.v1.messagePublished"
     pubsub_topic   = google_pubsub_topic.scc_findings.id
     retry_policy   = "RETRY_POLICY_RETRY"
-    # Note: service_account_email is intentionally omitted here. For a Pub/Sub
-    # trigger the Eventarc control plane uses its own managed service account to
-    # invoke the function; setting the function runtime SA in this block is
-    # incorrect and causes trigger creation failures.
+    # service_account_email intentionally omitted; Eventarc uses its own managed identity.
   }
 
-  labels = {
-    app = "securevault"
-  }
+  labels = local.common_labels
 
   depends_on = [
     google_secret_manager_secret_iam_member.function_brevo_accessor,
@@ -181,7 +328,6 @@ resource "google_cloudfunctions2_function" "scc_processor" {
 # Cost: first ~600k writes/month (20k/day), 1 GiB storage free.
 #-------------------------------------------------------------------------------
 resource "google_firestore_database" "default" {
-  # Cost: free tier generous for low-volume audit logs.
   project     = var.project_id
   name        = "(default)"
   location_id = var.firestore_location
@@ -197,23 +343,25 @@ resource "google_firestore_database" "default" {
 # Cost: first 10 GiB storage and 1 TiB query free per month.
 #-------------------------------------------------------------------------------
 resource "google_bigquery_dataset" "analytics" {
-  # checkov:skip=CKV_GCP_81: Risk accepted. Default GCP-managed encryption (Google-managed encryption key) satisfies analytics needs for this low-sensitivity finding data. Configuring CMEK would require a Cloud KMS key ring/key, key-management overhead, and additional cost that is not justified under the $5/month hobby-project target. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
-  # Cost: free storage under 10 GiB; partitioned table minimizes scanned bytes.
   dataset_id  = "securevault_analytics"
   description = "SecureVault findings and remediation analytics"
   location    = var.bigquery_location
 
-  labels = {
-    app = "securevault"
+  default_encryption_configuration {
+    kms_key_name = google_kms_crypto_key.securevault.id
   }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_kms_crypto_key_iam_member.bigquery_encrypt_decrypt,
+  ]
 }
 
 resource "google_bigquery_table" "findings_history" {
-  # checkov:skip=CKV_GCP_80: Risk accepted. Default GCP-managed encryption is sufficient for findings analytics. CMEK is not justified under the $5/month target and would introduce key-management overhead. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
-  # checkov:skip=CKV_GCP_121: Risk accepted. Deletion protection is disabled to allow cost-controlled cleanup of the analytics table. The same data is replicated to Firestore (operational state) and captured in Cloud Audit Logs, so accidental deletion does not destroy the only copy of audit evidence. See context/THREAT_MODEL.md and adr/ADR-007-threat-model-and-trust-boundaries.md.
-  # Cost: date partitioning reduces query cost significantly.
-  dataset_id = google_bigquery_dataset.analytics.dataset_id
-  table_id   = "findings_history"
+  dataset_id          = google_bigquery_dataset.analytics.dataset_id
+  table_id            = "findings_history"
+  deletion_protection = true
 
   schema = file("${path.module}/bigquery_schema.json")
 
@@ -223,9 +371,15 @@ resource "google_bigquery_table" "findings_history" {
     expiration_ms = null
   }
 
-  labels = {
-    app = "securevault"
+  encryption_configuration {
+    kms_key_name = google_kms_crypto_key.securevault.id
   }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_kms_crypto_key_iam_member.bigquery_encrypt_decrypt,
+  ]
 }
 
 # Allow the function to stream rows into BigQuery.
@@ -246,13 +400,6 @@ resource "google_project_iam_member" "function_bigquery_job_user" {
 resource "google_project_iam_member" "function_firestore_user" {
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.scc_processor.email}"
-}
-
-# Allow reading its own secrets.
-resource "google_project_iam_member" "function_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.scc_processor.email}"
 }
 
@@ -307,11 +454,67 @@ resource "google_project_iam_member" "function_remediator" {
 }
 
 #-------------------------------------------------------------------------------
+# Log-based metric and alert for critical findings
+#-------------------------------------------------------------------------------
+resource "google_logging_metric" "securevault_finding" {
+  name   = "securevault_finding"
+  filter = "resource.type=\"cloud_function\" labels.function_name=\"scc-processor\" jsonPayload.message=\"Finding processing complete\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+    description = "SecureVault processed findings by severity and class"
+    labels {
+      key         = "severity"
+      value_type  = "STRING"
+      description = "Finding severity"
+    }
+    labels {
+      key         = "finding_class"
+      value_type  = "STRING"
+      description = "Finding class"
+    }
+  }
+
+  label_extractors = {
+    "severity"      = "EXTRACT(jsonPayload.finding_severity)"
+    "finding_class" = "EXTRACT(jsonPayload.finding_class)"
+  }
+}
+
+resource "google_monitoring_alert_policy" "critical_finding" {
+  display_name = "SecureVault Critical Finding Detected"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Critical finding processed"
+    condition_threshold {
+      filter          = "resource.type=\"cloud_function\" AND metric.type=\"logging.googleapis.com/user/securevault_finding\" AND metric.labels.severity=\"CRITICAL\""
+      duration        = "0s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_RATE"
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email.id]
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+
+  user_labels = local.common_labels
+}
+
+#-------------------------------------------------------------------------------
 # Cloud Monitoring dashboard
 # Cost: dashboard creation free; metric reads within free tier.
 #-------------------------------------------------------------------------------
 resource "google_monitoring_dashboard" "securevault" {
-  # Cost: free.
   dashboard_json = jsonencode({
     displayName = "SecureVault Dashboard"
     gridLayout = {
@@ -399,7 +602,6 @@ resource "google_monitoring_dashboard" "securevault" {
 # Cost: free alert policies; notification channels may cost if non-email.
 #-------------------------------------------------------------------------------
 resource "google_monitoring_alert_policy" "function_error_rate" {
-  # Cost: free.
   display_name = "SecureVault Function Error Rate > 5%"
   combiner     = "OR"
 
@@ -428,9 +630,7 @@ resource "google_monitoring_alert_policy" "function_error_rate" {
     auto_close = "86400s"
   }
 
-  user_labels = {
-    app = "securevault"
-  }
+  user_labels = local.common_labels
 }
 
 resource "google_monitoring_notification_channel" "email" {
@@ -458,6 +658,9 @@ resource "google_project_service" "services" {
     "storage.googleapis.com",
     "cloudasset.googleapis.com",
     "iam.googleapis.com",
+    "cloudkms.googleapis.com",
+    "compute.googleapis.com",
+    "vpcaccess.googleapis.com",
   ])
 
   project            = var.project_id
