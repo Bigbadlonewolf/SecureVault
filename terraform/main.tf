@@ -34,7 +34,6 @@ locals {
 resource "google_compute_network" "securevault" {
   name                    = "securevault-network"
   auto_create_subnetworks = false
-  labels                  = local.common_labels
 }
 
 resource "google_compute_firewall" "deny_all_ingress" {
@@ -49,8 +48,6 @@ resource "google_compute_firewall" "deny_all_ingress" {
   }
 
   source_ranges = ["0.0.0.0/0"]
-
-  labels = local.common_labels
 }
 
 resource "google_compute_subnetwork" "securevault" {
@@ -66,8 +63,6 @@ resource "google_compute_subnetwork" "securevault" {
     flow_sampling        = 0.5
     metadata             = "INCLUDE_ALL_METADATA"
   }
-
-  labels = local.common_labels
 }
 
 #-------------------------------------------------------------------------------
@@ -122,8 +117,6 @@ resource "google_vpc_access_connector" "securevault" {
   ip_cidr_range = "10.0.1.0/28"
   min_instances = 0
   max_instances = 2
-
-  labels = local.common_labels
 }
 
 #-------------------------------------------------------------------------------
@@ -133,8 +126,6 @@ resource "google_compute_router" "securevault" {
   name    = "securevault-router"
   region  = var.region
   network = google_compute_network.securevault.id
-
-  labels = local.common_labels
 }
 
 resource "google_compute_router_nat" "securevault" {
@@ -161,8 +152,6 @@ resource "google_service_account" "scc_processor" {
   account_id   = "scc-processor"
   display_name = "SecureVault SCC Processor Function"
   description  = "Dedicated runtime identity for the scc-processor Cloud Function"
-
-  labels = local.common_labels
 }
 
 #-------------------------------------------------------------------------------
@@ -484,14 +473,14 @@ resource "google_project_iam_member" "function_remediator" {
 # Log-based metric and alert for critical findings
 #-------------------------------------------------------------------------------
 resource "google_logging_metric" "securevault_finding" {
-  name   = "securevault_finding"
-  filter = "resource.type=\"cloud_function\" labels.function_name=\"scc-processor\" jsonPayload.message=\"Finding processing complete\""
+  name        = "securevault_finding"
+  description = "SecureVault processed findings by severity and class"
+  filter      = "resource.type=\"cloud_function\" labels.function_name=\"scc-processor\" jsonPayload.message=\"Finding processing complete\""
 
   metric_descriptor {
     metric_kind = "DELTA"
     value_type  = "INT64"
     unit        = "1"
-    description = "SecureVault processed findings by severity and class"
     labels {
       key         = "severity"
       value_type  = "STRING"

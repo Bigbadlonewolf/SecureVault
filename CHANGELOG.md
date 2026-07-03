@@ -15,6 +15,7 @@
 - Consolidated CI/CD workflows: deleted redundant `.github/workflows/security-scan.yml` and zombie `.github/workflows/terraform-plan.yml`; all CI now runs through `.github/workflows/ci.yml`.
 - Pinned CI tool versions for deterministic builds: `bandit==1.7.9`, `pip-audit==2.7.3`, `pytest==8.2.2`, `bridgecrewio/checkov-action@v12`, `trufflesecurity/trufflehog@v3.80.1`.
 - Replaced the fake `verify` job in `.github/workflows/deploy.yml` with a real GitHub Checks API query that fails deployment if any check on the latest `main` commit is red.
+- Fixed Terraform provider schema mismatches in `terraform/main.tf`: removed `labels` from resources that do not expose the argument (`google_compute_network`, `google_compute_firewall`, `google_compute_subnetwork`, `google_compute_router`, `google_vpc_access_connector`, `google_service_account`) and moved `description` out of `google_logging_metric.metric_descriptor` to the resource top level, restoring a passing `terraform validate`.
 
 ## [0.1.0] - 2026-07-02
 

@@ -109,7 +109,19 @@ This document records the defects resolved and the production-grade hardening ap
 
 **Defect addressed:** Checkov flagged missing resource labels that support IAM/ownership tracking.
 
-**Fix:** Applied `local.common_labels` consistently across Terraform resources.
+**Fix:** Applied `local.common_labels` to Terraform resources that expose a `labels` argument in the current Google provider schema. Labels were removed from resources that do not support the argument (`google_compute_network`, `google_compute_firewall`, `google_compute_subnetwork`, `google_compute_router`, `google_vpc_access_connector`, `google_service_account`), preventing `terraform validate` failures.
+
+---
+
+## 9. Terraform: Provider Schema Validation
+
+**Defect addressed:** `terraform validate` failed with `Unsupported argument` errors for `labels` on several Compute/Service resources and for `description` inside `google_logging_metric.metric_descriptor`.
+
+**Fix:**
+
+- Removed `labels` from resources where the argument is not exposed by `hashicorp/google` v5.x in this environment.
+- Moved the `description` field from `metric_descriptor` to the top-level `google_logging_metric` block.
+- Verified `terraform validate` now passes locally.
 
 ---
 
