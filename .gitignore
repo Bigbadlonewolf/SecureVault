@@ -1,0 +1,59 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+terraform/.terraform.lock.hcl
+terraform/crash.log
+terraform/crash.*.log
+terraform/*.plan
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Cloud Function
+src/*.zip
+src.zip
+
+# Environment and secrets
+.env
+.env.*
+*.key
+*.pem
+*.json
+credentials.json
+service-account.json
+
+# Terraform schema files are not secrets
+!terraform/bigquery_schema.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent workspace artifacts
+.claude/
+raw/
+# Agent workspace artifacts
+trufflehog.zip
