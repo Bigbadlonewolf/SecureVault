@@ -28,7 +28,7 @@ Deploy the processor as a **Cloud Functions Gen 2** function running Python 3.11
 - Not suitable if the pipeline later grows into a multi-service application.
 - Cold-start latency may be noticeable for very infrequent findings.
 
-## Alternatives Considered
+## Alternatives considered
 
 | Alternative | Pros | Cons | Verdict |
 |---|---|---|---|

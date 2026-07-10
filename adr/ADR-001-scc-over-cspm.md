@@ -1,4 +1,4 @@
-# ADR-001: Security Command Center over Third-Party CSPM
+# ADR-001: Security Command Center over third-party CSPM
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
@@ -7,11 +7,11 @@
 
 ## Context
 
-SecureVault needs a reliable, cost-effective source of security findings in GCP. Financial institutions already using GCP can either leverage the native Security Command Center (SCC) or purchase a third-party Cloud Security Posture Management (CSPM) product such as Prisma Cloud or Wiz. The choice affects licensing cost, data residency, integration complexity, and operational overhead.
+SecureVault needs a source of security findings in GCP that is native, stable, and cheap at low volume. Financial institutions already using GCP can either use the native Security Command Center (SCC) or purchase a third-party Cloud Security Posture Management (CSPM) product such as Prisma Cloud or Wiz. The choice affects licensing cost, data residency, integration complexity, and operational overhead.
 
 ## Decision
 
-Use **Google Security Command Center (SCC)** as the sole findings source. SCC provides native Pub/Sub notifications, a stable findings schema, and requires no additional per-workload licensing.
+Use Google Security Command Center (SCC) as the sole findings source. SCC provides native Pub/Sub notifications, a stable findings schema, and requires no additional per-workload licensing.
 
 ## Consequences
 
@@ -24,11 +24,11 @@ Use **Google Security Command Center (SCC)** as the sole findings source. SCC pr
 
 **Negative:**
 
-- Less rich visualization and correlation than dedicated CSPM dashboards.
+- Less detailed visualization and correlation than dedicated CSPM dashboards.
 - No cross-cloud coverage; GCP-only environments only.
 - Tuned detection rules are limited to what SCC and built-in services provide.
 
-## Alternatives Considered
+## Alternatives considered
 
 | Alternative | Pros | Cons | Verdict |
 |---|---|---|---|

@@ -1,4 +1,4 @@
-# ADR-007: Threat Model and Trust Boundaries
+# ADR-007: Threat model and trust boundaries
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
@@ -32,7 +32,7 @@ Adopt the following trust-boundary design:
 - More IAM policies to manage and review.
 - Adding new remediation classes requires updating the custom role.
 
-## Threat Model Diagram
+## Threat model diagram
 
 ```mermaid
 flowchart LR
@@ -65,7 +65,7 @@ flowchart LR
     FN -->|metricWriter| MON
 ```
 
-## Alternatives Considered
+## Alternatives considered
 
 | Alternative | Pros | Cons | Verdict |
 |---|---|---|---|

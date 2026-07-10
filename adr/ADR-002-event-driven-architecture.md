@@ -1,4 +1,4 @@
-# ADR-002: Event-Driven Ingestion over Polling
+# ADR-002: Event-driven ingestion over polling
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
@@ -28,7 +28,7 @@ Use an **event-driven pipeline** built on Cloud Pub/Sub. SCC is configured to pu
 - Requires understanding of Pub/Sub retry and dead-letter semantics.
 - Slightly more complex to test locally than a simple cron job.
 
-## Alternatives Considered
+## Alternatives considered
 
 | Alternative | Pros | Cons | Verdict |
 |---|---|---|---|

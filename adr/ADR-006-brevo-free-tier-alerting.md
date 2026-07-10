@@ -1,4 +1,4 @@
-# ADR-006: Brevo Free Tier over PagerDuty / SNS / Slack
+# ADR-006: Brevo free tier over PagerDuty / SNS / Slack
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
@@ -27,7 +27,7 @@ Use **Brevo’s free tier** for email alerting. The free tier provides 300 email
 - No native paging or on-call escalation.
 - Daily cap could be exceeded at very high finding volumes.
 
-## Alternatives Considered
+## Alternatives considered
 
 | Alternative | Pros | Cons | Verdict |
 |---|---|---|---|

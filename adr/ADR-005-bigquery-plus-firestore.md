@@ -1,4 +1,4 @@
-# ADR-005: BigQuery + Firestore over a Single Database
+# ADR-005: BigQuery + Firestore over a single database
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
@@ -11,10 +11,10 @@ SecureVault needs two distinct storage capabilities: fast, schema-flexible opera
 
 ## Decision
 
-Use **Firestore** for operational state and **BigQuery** for historical analytics.
+Use Firestore for operational state and BigQuery for historical analytics.
 
-- **Firestore** — `remediation_log` collection keyed by finding ID. Used for fast lookups and recent-activity views.
-- **BigQuery** — `securevault_analytics.findings_history` date-partitioned table. Used for trend queries, compliance reporting, and long-term audit.
+- Firestore: `remediation_log` collection keyed by finding ID. Used for fast lookups and recent-activity views.
+- BigQuery: `securevault_analytics.findings_history` date-partitioned table. Used for trend queries, compliance reporting, and long-term audit.
 
 ## Consequences
 
@@ -30,7 +30,7 @@ Use **Firestore** for operational state and **BigQuery** for historical analytic
 - Two storage clients to maintain.
 - Eventual consistency between Firestore and BigQuery must be accepted.
 
-## Alternatives Considered
+## Alternatives considered
 
 | Alternative | Pros | Cons | Verdict |
 |---|---|---|---|
