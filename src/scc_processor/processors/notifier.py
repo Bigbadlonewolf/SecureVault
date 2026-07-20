@@ -45,13 +45,13 @@ def send_alert(finding: Dict[str, Any], action_result: Dict[str, Any]) -> bool:
 
         severity = finding.get("severity", "UNKNOWN")
         finding_class = _extract_finding_class(finding)
-        resource = finding.get("resource", "UNKNOWN")
+        resource = finding.get("resourceName", "UNKNOWN")
+        finding_name = finding.get("name", "")
 
         subject = f"[SecureVault] {severity}: {finding_class} on {resource}"
 
         remediation_status = action_result.get("status", "Manual review required")
         remediation_action = action_result.get("action", "N/A")
-        resource_link = finding.get("resourceLink", "")
 
         body = f"""SecureVault detected a {severity} security finding.
 
@@ -60,7 +60,7 @@ Resource: {resource}
 Severity: {severity}
 Remediation action: {remediation_action}
 Remediation status: {remediation_status}
-Resource link: {resource_link or "Not available"}
+Finding: {finding_name or "Not available"}
 Timestamp: {finding.get('createTime', 'Unknown')}
 
 This alert was generated automatically by SecureVault.
@@ -88,7 +88,7 @@ This alert was generated automatically by SecureVault.
         _logger.info(
             "Brevo alert sent",
             extra={
-                "finding_id": finding.get("findingId", ""),
+                "finding_id": finding.get("name", ""),
                 "severity": severity,
                 "recipient": alert_email,
                 "status_code": response.status_code,
@@ -98,13 +98,13 @@ This alert was generated automatically by SecureVault.
     except requests.RequestException as exc:
         _logger.error(
             "Brevo alert request failed",
-            extra={"finding_id": finding.get("findingId", ""), "error": str(exc)},
+            extra={"finding_id": finding.get("name", ""), "error": str(exc)},
         )
         return False
     except Exception as exc:  # pylint: disable=broad-except
         _logger.critical(
             "Unexpected error sending Brevo alert",
-            extra={"finding_id": finding.get("findingId", ""), "error": str(exc)},
+            extra={"finding_id": finding.get("name", ""), "error": str(exc)},
         )
         return False
 

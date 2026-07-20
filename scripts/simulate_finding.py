@@ -31,54 +31,58 @@ def _sample_finding(finding_class: str, severity: str) -> Dict[str, Any]:
     # internal --finding-class value only to select the realistic shape.
     templates = {
         "PUBLIC_BUCKET_ACL": {
-            "findingId": f"{finding_class}-{now}",
-            "findingClass": "MISCONFIGURATION",
-            "category": "STORAGE_BUCKET_PUBLIC",
+            "name": f"projects/{project}/sources/123/findings/sim-{finding_class}-{now}",
+            "parent": f"projects/{project}/sources/123",
+            "resourceName": f"//storage.googleapis.com/{project}-public-bucket",
+            "state": "ACTIVE",
+            "category": "PUBLIC_BUCKET_ACL",
             "severity": severity,
-            "resource": f"gs://{project}-public-bucket",
-            "resourceType": "storage.googleapis.com/Bucket",
-            "resourceLink": f"https://console.cloud.google.com/storage/browser/{project}-public-bucket",
-            "projectId": project,
+            "findingClass": "MISCONFIGURATION",
+            "eventTime": now,
             "createTime": now,
+            "sourceProperties": {},
         },
         "OPEN_FIREWALL": {
-            "findingId": f"{finding_class}-{now}",
-            "findingClass": "MISCONFIGURATION",
-            "category": "FIREWALL_OPEN",
+            "name": f"projects/{project}/sources/123/findings/sim-{finding_class}-{now}",
+            "parent": f"projects/{project}/sources/123",
+            "resourceName": f"//compute.googleapis.com/projects/{project}/global/firewalls/allow-all-ssh",
+            "state": "ACTIVE",
+            "category": "OPEN_FIREWALL",
             "severity": severity,
-            "resource": f"projects/{project}/firewalls/allow-all-ssh",
-            "resourceType": "compute.googleapis.com/Firewall",
-            "resourceLink": f"https://console.cloud.google.com/networking/firewalls/details/allow-all-ssh?project={project}",
-            "projectId": project,
+            "findingClass": "MISCONFIGURATION",
+            "eventTime": now,
             "createTime": now,
+            "sourceProperties": {},
         },
         "OVER_PRIVILEGED_SA": {
-            "findingId": f"{finding_class}-{now}",
-            "findingClass": "MISCONFIGURATION",
-            "category": "PRIVILEGED_SERVICE_ACCOUNT",
+            "name": f"projects/{project}/sources/123/findings/sim-{finding_class}-{now}",
+            "parent": f"projects/{project}/sources/123",
+            "resourceName": f"//iam.googleapis.com/projects/{project}/serviceAccounts/overprivileged@{project}.iam.gserviceaccount.com",
+            "state": "ACTIVE",
+            "category": "OVER_PRIVILEGED_SERVICE_ACCOUNT",
             "severity": severity,
-            "resource": f"projects/{project}/serviceAccounts/overprivileged@{project}.iam.gserviceaccount.com",
-            "resourceType": "iam.googleapis.com/ServiceAccount",
-            "resourceLink": f"https://console.cloud.google.com/iam-admin/serviceaccounts?project={project}",
-            "projectId": project,
+            "findingClass": "MISCONFIGURATION",
+            "eventTime": now,
             "createTime": now,
+            "sourceProperties": {},
         },
     }
 
     if finding_class in templates:
         return templates[finding_class]
 
-    # Generic fallback for classes like DLP, UNUSED_SERVICE_ACCOUNT, etc.
+    # Generic fallback for classes like PUBLIC_DATASET, etc.
     return {
-        "findingId": f"{finding_class}-{now}",
-        "findingClass": "MISCONFIGURATION",
+        "name": f"projects/{project}/sources/123/findings/sim-{finding_class}-{now}",
+        "parent": f"projects/{project}/sources/123",
+        "resourceName": f"//cloudresourcemanager.googleapis.com/projects/{project}",
+        "state": "ACTIVE",
         "category": finding_class,
         "severity": severity,
-        "resource": f"projects/{project}/simulated/{finding_class.lower()}",
-        "resourceType": "cloudresourcemanager.googleapis.com/Project",
-        "resourceLink": f"https://console.cloud.google.com/home/dashboard?project={project}",
-        "projectId": project,
+        "findingClass": "MISCONFIGURATION",
+        "eventTime": now,
         "createTime": now,
+        "sourceProperties": {},
     }
 
 
@@ -135,7 +139,7 @@ def main() -> int:
     severity = args.severity or ("CRITICAL" if args.finding_class in mapped_classes else "HIGH")
 
     finding = _sample_finding(args.finding_class.upper(), severity.upper())
-    print(f"Publishing {finding['findingClass']} ({finding['severity']}) finding to {args.topic}...")
+    print(f"Publishing {finding['category']} ({finding['severity']}) finding to {args.topic}...")
 
     try:
         message_id = _publish(args.project, args.topic, finding)
