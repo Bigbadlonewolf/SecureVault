@@ -15,11 +15,11 @@ from scc_processor.processors.notifier import send_alert
 @pytest.fixture
 def base_finding():
     return {
-        "findingId": "notify-test",
+        "name": "projects/test/sources/123/findings/notify-test",
         "findingClass": "MISCONFIGURATION",
-        "category": "FIREWALL_OPEN",
+        "category": "OPEN_FIREWALL",
         "severity": "CRITICAL",
-        "resource": "projects/test/firewalls/allow-all-ssh",
+        "resourceName": "//compute.googleapis.com/projects/test/global/firewalls/allow-all-ssh",
         "createTime": "2026-07-03T12:00:00Z",
     }
 
