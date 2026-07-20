@@ -5,7 +5,7 @@
 > **Date:** 2026-07-03  
 > **Status:** Initial release (v0.1.0)
 
-SecureVault is engineered to run continuously for pennies per month at low scale while staying well under a hard ceiling of **$20/month** as volume grows. The target operating cost is **under $5/month**; a GCP billing alert is configured to fire at **$15/month**.
+SecureVault's event-driven workload — the Cloud Function, Pub/Sub, Firestore, and BigQuery — costs pennies per month at low scale. The production hardening added fixed infrastructure that sets the real monthly floor at roughly **$45/month** regardless of finding volume: a Cloud NAT gateway (~$32/month) and a VPC connector (2 f1-micro instances, ~$11/month). A GCP billing alert is configured to fire at **$60/month**, above that floor with headroom for growth.
 
 This analysis uses **published GCP list pricing** for `us-central1` / `US` and shows the exact GB-second / vCPU-second math so a hiring panel can audit it in real time.
 
@@ -30,6 +30,8 @@ This analysis uses **published GCP list pricing** for `us-central1` / `US` and s
 - [Cloud Firestore pricing](https://cloud.google.com/firestore/pricing)
 - [BigQuery pricing](https://cloud.google.com/bigquery/pricing)
 - [Secret Manager pricing](https://cloud.google.com/secret-manager/pricing)
+- [Cloud NAT pricing](https://cloud.google.com/vpc/network-pricing)
+- [VPC Serverless Access pricing](https://cloud.google.com/vpc/docs/configure-serverless-vpc-access#pricing)
 - [Brevo pricing](https://www.brevo.com/pricing/)
 
 ---
@@ -85,6 +87,8 @@ At normal scale, the free tier absorbs virtually all function cost.
 | **Cloud Monitoring** | Dashboards + email alerts free | Log ingestion: $0.50 / GiB beyond 150 MB/day | $0 | $0 | $0 | One dashboard, one error-rate alert, email channel |
 | **Brevo** | 300 emails/day (~9,000/mo) | Paid plans start after free tier | $0 | $0 | $0 | Free tier sufficient at expected alert volumes |
 | **Cloud Storage** | 5 GB standard storage | $0.020 / GB-month | <$0.01 | <$0.01 | <$0.01 | Source zip < 1 MB |
+| **Cloud NAT** | None | ~$0.044/hour gateway uptime (~$32/month) + per-GiB processing | ~$32 | ~$32 | ~$32 | Single gateway; errors-only logging |
+| **VPC connector** | None | 2 f1-micro instances ≈ $11/month (`min_instances = 2`, the API minimum) | ~$11 | ~$11 | ~$11 | Minimum supported size |
 
 ### Detail Notes
 
@@ -93,24 +97,26 @@ At normal scale, the free tier absorbs virtually all function cost.
 - **Firestore** free writes are ~600,000/month (20,000/day). At 10,000 findings we use ~10,000 writes, so the cost is effectively zero; storage remains under 1 GiB for a long time.
 - **BigQuery** streaming inserts bill at $0.01 per 200 MB. At 10,000 rows/month (~20 MB) the streaming cost is ~$0.001. Storage for 20 MB at $0.02/GB-month is negligible.
 - **Secret Manager** charges ~$0.06/month per active secret version regardless of usage. Access operations are charged only if the secret is read more than 10,000 times/month; the Brevo key is read only when an alert is sent.
+- **Cloud NAT** bills for gateway uptime whether or not traffic flows. One gateway at ~$0.044/hour is ~$32/month; data processing adds per-GiB charges that are negligible at this volume.
+- **VPC connector** bills per instance-hour. The API minimum is 2 instances (`min_instances = 2`), so the connector costs ~$11/month even when idle.
 
 ---
 
 ## Monthly Totals
 
-| Scale | Function Compute | Pub/Sub | Firestore | BigQuery | Secret Mgr | Storage | **Estimated Total** | Verdict |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| ~100 findings/mo | $0 | $0 | $0 | $0 | ~$0.06 | <$0.01 | **~$0.07** | ✅ Under $5 |
-| ~1,000 findings/mo | $0 | $0 | $0 | $0 | ~$0.06 | <$0.01 | **~$0.07** | ✅ Under $5 |
-| ~10,000 findings/mo | $0 | $0 | ~$0.00–$0.10 | ~$0.01 | ~$0.06 | <$0.01 | **~$0.10–$0.20** | ✅ Under $5 |
-| ~100,000 findings/mo | $0 | $0 | ~$0.36 | ~$0.14 | ~$0.06 | <$0.01 | **~$0.60** | ✅ Under $5 |
-| ~1,000,000 findings/mo | $0 | $0 | ~$3.96 | ~$1.24 | ~$0.06 | <$0.01 | **~$5.30** | ⚠️ Approaches $5 target |
+| Scale | Function Compute | Pub/Sub | Firestore | BigQuery | Secret Mgr | Storage | Fixed Infra (NAT + connector) | **Estimated Total** | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| ~100 findings/mo | $0 | $0 | $0 | $0 | ~$0.06 | <$0.01 | ~$43 | **~$43.10** | ✅ At ~$45 floor |
+| ~1,000 findings/mo | $0 | $0 | $0 | $0 | ~$0.06 | <$0.01 | ~$43 | **~$43.10** | ✅ At ~$45 floor |
+| ~10,000 findings/mo | $0 | $0 | ~$0.00–$0.10 | ~$0.01 | ~$0.06 | <$0.01 | ~$43 | **~$43.10–$43.20** | ✅ At ~$45 floor |
+| ~100,000 findings/mo | $0 | $0 | ~$0.36 | ~$0.14 | ~$0.06 | <$0.01 | ~$43 | **~$43.60** | ✅ Near floor |
+| ~1,000,000 findings/mo | $0 | $0 | ~$3.96 | ~$1.24 | ~$0.06 | <$0.01 | ~$43 | **~$48.30** | ⚠️ Approaches $50 |
 
 > **Note:** “$0” means the usage is covered by the GCP always-free tier for that meter.
 
-Even at **1,000,000 findings/month**, the workload stays near the $5 target before any optimization. The $20/month ceiling provides headroom for retry storms, temporary log spikes, or regional pricing differences.
+Even at **1,000,000 findings/month**, the event-driven workload adds only about $5 on top of the fixed infrastructure floor. The $60/month billing alert leaves headroom for retry storms, temporary log spikes, or regional pricing differences.
 
-> **Cost model update:** The v0.1.2 hardening pass added VPC, Cloud NAT, Cloud KMS (CMEK), a dedicated access-log bucket, and additional Cloud Monitoring alerts. These controls intentionally exceed the original under-\$5 demo target in favor of production-grade security. The `$20/month` ceiling and billing alert at `$15/month` remain in place.
+> **Cost model update:** The v0.1.2 hardening pass added VPC, Cloud NAT, Cloud KMS (CMEK), a dedicated access-log bucket, and additional Cloud Monitoring alerts. Cloud NAT (~$32/month) and the VPC connector (~$11/month) are fixed monthly charges that replaced the original under-$5 demo budget with a real floor of ~$45/month. The billing alert moved from $15 to $60/month accordingly; the old $15 threshold sits below the infrastructure floor and would fire immediately.
 
 ---
 
@@ -147,6 +153,7 @@ Function subtotal (pay-as-you-go) = ~$0.11
 | **Alert volume > 300/day** | Brevo free tier exhausted; paid email/SNS needed | Add PagerDuty/SNS fallback in Phase 2 |
 | **BigQuery queries scan full table** | Query cost dominates (>$6/TiB) | Keep queries partitioned on `timestamp`; set `require_partition_filter` |
 | **Secret Manager >10k reads/month** | ~$0.05 per 10k operations | Cache Brevo key in-process; secret is read only on alerts |
+| **Remove Cloud NAT** | Drops ~$32/month but breaks private egress for remediation calls | Keep NAT; it is the audited egress path |
 
 ---
 
@@ -155,9 +162,9 @@ Function subtotal (pay-as-you-go) = ~$0.11
 1. **Function memory** pinned to 256 MiB. Raising this is the fastest way to increase GB-second cost.
 2. **Pub/Sub retention** reduced from the default 7 days to 1 day, minimizing message-storage cost.
 3. **BigQuery partitioning** — the `findings_history` table is partitioned daily so trend queries scan only relevant days.
-4. **Billing alert** — GCP budget notification at **$15/month**, well before the $20 ceiling.
+4. **Billing alert** — GCP budget notification at **$60/month**, above the ~$45 fixed infrastructure floor.
 5. **Cloud Monitoring alert** — function error-rate alert catches runaway invocations or retry storms early.
-6. **No always-on instances** — `min_instance_count = 0` means the function scales to zero between findings.
+6. **No always-on function instances** — `min_instance_count = 0` means the function scales to zero between findings; only the NAT gateway and VPC connector bill while idle.
 
 ---
 

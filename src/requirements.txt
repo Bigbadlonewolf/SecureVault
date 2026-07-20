@@ -1,6 +1,7 @@
 # SecureVault Python dependencies
 # Python 3.11 | Cloud Functions Gen 2
 
+functions-framework>=3.0
 google-cloud-storage>=2.10.0
 google-cloud-compute>=1.14.0
 google-cloud-resource-manager>=1.10.0
