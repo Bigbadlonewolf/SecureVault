@@ -115,7 +115,7 @@ resource "google_vpc_access_connector" "securevault" {
   region        = var.region
   network       = google_compute_network.securevault.id
   ip_cidr_range = "10.0.1.0/28"
-  min_instances = 0
+  min_instances = 2
   max_instances = 2
 }
 
@@ -287,7 +287,7 @@ resource "google_cloudfunctions2_function" "scc_processor" {
 
   build_config {
     runtime     = "python311"
-    entry_point = "scc_processor.main.process_scc_finding"
+    entry_point = "process_scc_finding"
     source {
       storage_source {
         bucket = google_storage_bucket.source.name
