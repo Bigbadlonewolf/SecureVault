@@ -25,7 +25,7 @@ SecureVault consumes SCC findings from a Pub/Sub topic, classifies each one, and
 - **High-severity findings** are escalated to a human by email.
 - **Medium-severity findings** are logged for trend analysis.
 
-The known classes that get automatic remediation today are public Cloud Storage buckets, open VPC firewall rules, and over-privileged service accounts. These are high-impact, low-risk-to-fix problems. If SecureVault sees a critical finding it does not recognize, it alerts instead of acting, so automation never runs blind.
+The known classes that get automatic remediation today are public Cloud Storage buckets and open VPC firewall rules. These are high-impact, low-risk-to-fix problems. Over-privileged service accounts are deliberately alert-only: the SCC finding does not say which specific role is excessive, so revoking roles unattended could break production. If SecureVault sees a critical finding it does not recognize, it alerts instead of acting, so automation never runs blind.
 
 ```mermaid
 flowchart TD
@@ -72,7 +72,7 @@ I wrote an Architecture Decision Record for each major choice. Four of them are 
 
 **Cloud Functions Gen 2 over Cloud Run or GKE.** The processor does one thing: handle Pub/Sub events. Gen 2 gives automatic scaling, a built-in trigger, and a generous free tier. A container platform would add operational work without adding value for this single handler.
 
-**Severity response matrix.** Automation is powerful, but only when it is safe. I chose to auto-remediate three well-understood finding classes. Anything else, even if critical, is alerted to a human first. This prevents the pipeline from making changes it cannot reason about.
+**Severity response matrix.** Automation is powerful, but only when it is safe. I chose to auto-remediate two well-understood finding classes. Anything else, even if critical, is alerted to a human first. This prevents the pipeline from making changes it cannot reason about.
 
 ## The AI-Assisted Build
 
@@ -123,7 +123,7 @@ SecureVault is deliberately scoped for a first release. Its current limitations 
 
 - Single-region deployment, with no multi-region disaster recovery yet.
 - Brevo’s free tier has no SLA, so alerting is not guaranteed.
-- Auto-remediation is limited to three finding classes.
+- Auto-remediation is limited to two finding classes.
 - No SOAR integration with tools like ServiceNow or Jira.
 - No L1/L2/L3 analyst routing.
 - Only SCC is ingested; other signal sources are not correlated.

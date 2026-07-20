@@ -38,7 +38,7 @@ flowchart TD
     DE -->|MEDIUM / LOW| LOG[Log to Firestore]
     REM -->|PUBLIC_BUCKET_ACL| A1[Remove allUsers]
     REM -->|OPEN_FIREWALL| A2[Disable rule]
-    REM -->|OVER_PRIVILEGED_SA| A3[Trim roles]
+    DE -->|OVER_PRIVILEGED_SA| ALERT1
     ALERT1 --> BV[Brevo Email]
     ALERT2 --> BV
     CF --> FS[Firestore: remediation_log]
@@ -53,7 +53,7 @@ flowchart TD
 | **Security Command Center** | Native findings source; no extra CSPM license; data stays in GCP. | [ADR-001](../adr/ADR-001-scc-over-cspm.md) |
 | **Cloud Pub/Sub** | Event-driven ingestion: near real time, durable buffering, no polling quotas. | [ADR-002](../adr/ADR-002-event-driven-architecture.md) |
 | **Cloud Functions Gen 2** | Simplest operational model for a single-purpose event handler; free tier covers scale. | [ADR-003](../adr/ADR-003-cloud-functions-gen2.md) |
-| **Decision Engine** | Severity-driven response matrix; only three well-understood classes are auto-remediated. | [ADR-004](../adr/ADR-004-severity-response-matrix.md) |
+| **Decision Engine** | Severity-driven response matrix; only two well-understood classes are auto-remediated. | [ADR-004](../adr/ADR-004-severity-response-matrix.md) |
 | **Firestore + BigQuery** | Firestore for fast operational state; BigQuery for partitioned analytics. | [ADR-005](../adr/ADR-005-bigquery-plus-firestore.md) |
 | **Brevo** | Free tier covers expected alert volume; graceful degradation to Cloud Logging. | [ADR-006](../adr/ADR-006-brevo-free-tier-alerting.md) |
 | **Trust Boundaries** | Dedicated service account, custom remediation role, publisher-restricted Pub/Sub topic. | [ADR-007](../adr/ADR-007-threat-model-and-trust-boundaries.md) |
@@ -78,7 +78,7 @@ Auto-remediation is powerful but dangerous. I chose a conservative response matr
 - **HIGH** → alert only.
 - **MEDIUM / LOW** → log for digest.
 
-The three mapped classes — public bucket ACL, open firewall rule, and over-privileged service account — have safe, reversible remediation paths. Any finding we have not modeled is escalated to a human rather than risk a production outage.
+The two auto-remediated classes — public bucket ACL and open firewall rule — have safe, reversible remediation paths. Over-privileged service accounts are deliberately alert-only: the SCC finding does not identify which specific role is excessive, so unattended revocation is unsafe. Any finding we have not modeled is escalated to a human rather than risk a production outage.
 
 ### 3.3 How do you prevent the pipeline itself from being compromised? ([ADR-007](../adr/ADR-007-threat-model-and-trust-boundaries.md))
 
@@ -154,11 +154,11 @@ Cloud Run offers more runtime flexibility, custom concurrency, and longer timeou
 
 ### Q2. What happens if auto-remediation breaks a production service?
 
-Three safeguards limit that risk. First, only three finding classes are auto-remediated, and each has a safe, reversible action. Second, unmapped CRITICAL findings are alerted but not remediated. Third, every action is logged to Firestore and BigQuery for immediate rollback review. If we still see false positives, the response matrix can be adjusted in `config.yaml` and redeployed in minutes. See [`docs/OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md).
+Three safeguards limit that risk. First, only two finding classes are auto-remediated, and each has a safe, reversible action. Second, unmapped CRITICAL findings are alerted but not remediated. Third, every action is logged to Firestore and BigQuery for immediate rollback review. If we still see false positives, the response matrix can be adjusted in `config.yaml` and redeployed in minutes. See [`docs/OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md).
 
 ### Q3. How do you handle a poisoned or spoofed finding?
 
-The Pub/Sub topic restricts publishing to the SCC notification service account only. The default compute service account is explicitly denied. Even if a poisoned finding did arrive, the response matrix limits auto-remediation to the three mapped classes; unmapped CRITICAL findings trigger alerts but no action. All publish attempts are recorded in Cloud Audit Logs. See [ADR-007](../adr/ADR-007-threat-model-and-trust-boundaries.md).
+The Pub/Sub topic restricts publishing to the SCC notification service account only. The default compute service account is explicitly denied. Even if a poisoned finding did arrive, the response matrix limits auto-remediation to the two mapped classes; unmapped CRITICAL findings trigger alerts but no action. All publish attempts are recorded in Cloud Audit Logs. See [ADR-007](../adr/ADR-007-threat-model-and-trust-boundaries.md).
 
 ### Q4. Why Brevo instead of PagerDuty or SNS?
 
