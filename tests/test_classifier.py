@@ -12,10 +12,10 @@ from scc_processor.processors.classifier import classify_finding
 @pytest.fixture
 def base_finding():
     return {
-        "findingId": "test",
+        "name": "projects/test/sources/123/findings/test",
         "findingClass": "MISCONFIGURATION",
-        "category": "SERVICE_ACCOUNT",
-        "resource": "projects/test/serviceAccounts/unused@test.iam.gserviceaccount.com",
+        "category": "AUDIT_LOGGING_DISABLED",
+        "resourceName": "//cloudresourcemanager.googleapis.com/projects/test",
     }
 
 
@@ -36,22 +36,22 @@ def test_classify_medium(base_finding):
 
 def test_classify_override_elevates_public_bucket_to_critical():
     finding = {
-        "findingId": "override",
+        "name": "projects/test/sources/123/findings/override",
         "findingClass": "MISCONFIGURATION",
-        "category": "STORAGE_BUCKET_PUBLIC",
+        "category": "PUBLIC_BUCKET_ACL",
         "severity": "HIGH",
-        "resource": "gs://public-bucket",
+        "resourceName": "//storage.googleapis.com/public-bucket",
     }
     assert classify_finding(finding) == "CRITICAL"
 
 
 def test_classify_override_elevates_open_firewall_to_critical():
     finding = {
-        "findingId": "override",
+        "name": "projects/test/sources/123/findings/override",
         "findingClass": "MISCONFIGURATION",
-        "category": "FIREWALL_OPEN",
+        "category": "OPEN_FIREWALL",
         "severity": "MEDIUM",
-        "resource": "projects/test/firewalls/allow-all",
+        "resourceName": "//compute.googleapis.com/projects/test/global/firewalls/allow-all",
     }
     assert classify_finding(finding) == "CRITICAL"
 
