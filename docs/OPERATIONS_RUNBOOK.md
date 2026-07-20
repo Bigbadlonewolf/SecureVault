@@ -144,13 +144,15 @@ response_matrix:
     auto_remediate:
       - PUBLIC_BUCKET_ACL
       # - OPEN_FIREWALL   # now alerts only
-      - OVER_PRIVILEGED_SA
     default_action: alert_only
   HIGH:
     action: alert
   MEDIUM:
     action: log_digest
 ```
+
+Note that `OVER_PRIVILEGED_SA` is alert-only by design and is never in the
+`auto_remediate` list.
 
 To disable all auto-remediation temporarily:
 
@@ -261,23 +263,17 @@ For long-term scaling guidance, see [`context/COST_ANALYSIS.md`](../context/COST
 
 ### Adjust Severity Classifier Overrides
 
-Edit `src/processors/classifier.py` to add or modify an override. For example, to downgrade a noisy class to MEDIUM:
+Severity overrides live in the `severity_overrides` list in `src/config.yaml`. A class on that list is always elevated to CRITICAL regardless of the severity SCC assigns. To stop a noisy class from being elevated, remove it from the list so its native SCC severity applies:
 
-```python
-SEVERITY_OVERRIDES = {
-    "NOISY_DETECTOR_CLASS": "MEDIUM",
-}
+```yaml
+# Finding classes that should always be elevated to CRITICAL regardless of SCC severity.
+severity_overrides:
+  - PUBLIC_BUCKET_ACL
+  - OPEN_FIREWALL
+  # - OVER_PRIVILEGED_SA   # removed: handled at native SCC severity
 ```
 
-To suppress alerting for a class that should only be logged:
-
-```python
-SEVERITY_OVERRIDES = {
-    "EXPECTED_OR_MANAGED_CLASS": "MEDIUM",
-}
-```
-
-Then update `src/config.yaml` so MEDIUM findings are batched in the daily digest rather than alerted.
+A class that is not elevated and arrives as MEDIUM is logged for digest by default (`response_matrix.MEDIUM.action: log_digest`), so no further change is needed to keep it out of the alert path.
 
 ### Important Safeguards
 
