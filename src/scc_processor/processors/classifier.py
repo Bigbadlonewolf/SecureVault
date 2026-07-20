@@ -18,13 +18,12 @@ _SCC_SEVERITY_MAP = {
 }
 
 # Real SCC findings use fixed findingClass enums (e.g. MISCONFIGURATION) and put
-# the specific detector name in category. Map known categories to the internal
-# finding classes used by the response matrix and remediator.
+# the specific detector name in category. Map known detector categories to the
+# internal finding classes used by the response matrix and remediator.
 _CATEGORY_CLASS_MAP = {
-    "STORAGE_BUCKET_PUBLIC": "PUBLIC_BUCKET_ACL",
-    "FIREWALL_OPEN": "OPEN_FIREWALL",
-    "PRIVILEGED_SERVICE_ACCOUNT": "OVER_PRIVILEGED_SA",
-    "PRIVILEGE_ESCALATION": "OVER_PRIVILEGED_SA",
+    "PUBLIC_BUCKET_ACL": "PUBLIC_BUCKET_ACL",
+    "OPEN_FIREWALL": "OPEN_FIREWALL",
+    "OVER_PRIVILEGED_SERVICE_ACCOUNT": "OVER_PRIVILEGED_SA",
 }
 
 

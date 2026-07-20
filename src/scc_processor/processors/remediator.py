@@ -5,7 +5,7 @@ License: MIT
 """
 
 import os
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 from google.cloud import compute_v1, resourcemanager_v3, storage
 
@@ -21,6 +21,9 @@ _AUTO_REMEDIATION_CLASSES = {
     "PUBLIC_BUCKET_ACL": "remove_public_bucket_access",
     "OPEN_FIREWALL": "disable_open_firewall_rule",
 }
+
+# IAM members that make a Cloud Storage bucket publicly accessible.
+_PUBLIC_MEMBERS = frozenset({"allUsers", "allAuthenticatedUsers"})
 
 
 def remediate(finding: Dict[str, Any]) -> Dict[str, Any]:
@@ -49,7 +52,7 @@ def remediate(finding: Dict[str, Any]) -> Dict[str, Any]:
         _logger.error(
             "Remediation handler failed",
             extra={
-                "finding_id": finding.get("findingId", ""),
+                "finding_id": finding.get("name", ""),
                 "finding_class": finding_class,
                 "error": str(exc),
             },
@@ -74,7 +77,7 @@ def _get_handler(name: str) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
 
 def remove_public_bucket_access(finding: Dict[str, Any]) -> Dict[str, Any]:
     """Remove allUsers and allAuthenticatedUsers from a Cloud Storage bucket IAM policy."""
-    resource = finding.get("resource", "")
+    resource = finding.get("resourceName", "")
     bucket_name = _extract_bucket_name(resource)
     project_id = os.environ.get("PROJECT_ID")
 
@@ -89,31 +92,42 @@ def remove_public_bucket_access(finding: Dict[str, Any]) -> Dict[str, Any]:
     bucket = client.bucket(bucket_name)
     policy = bucket.get_iam_policy(requested_policy_version=3)
 
+    # google.api_core.iam.Policy exposes bindings as a list of
+    # {"role": ..., "members": {...}} dicts. This is the documented,
+    # policy-version-safe access path: dict-style access (policy[role])
+    # raises InvalidOperationException on version 3 policies, which
+    # requested_policy_version=3 can return.
     removed = False
-    for member in ("allUsers", "allAuthenticatedUsers"):
-        for role in list(policy.roles):
-            if policy.has_role(role, member):
-                policy[role].discard(member)
-                removed = True
+    kept = []
+    for binding in policy.bindings:
+        members = set(binding.get("members") or ())
+        updated = members - _PUBLIC_MEMBERS
+        if len(updated) != len(members):
+            removed = True
+        if updated:
+            binding["members"] = updated
+            kept.append(binding)
 
-    if removed:
-        bucket.set_iam_policy(policy)
-        _logger.info(
-            "Removed public access from bucket",
-            extra={"finding_id": finding.get("findingId", ""), "bucket": bucket_name},
-        )
-        return {"action": "PUBLIC_BUCKET_ACL", "status": "SUCCESS"}
+    if not removed:
+        return {
+            "action": "PUBLIC_BUCKET_ACL",
+            "status": "SKIPPED",
+            "message": "No public members found on bucket",
+        }
 
-    return {
-        "action": "PUBLIC_BUCKET_ACL",
-        "status": "SKIPPED",
-        "message": "No public members found on bucket",
-    }
+    # Drop bindings left with no members and write the policy back.
+    policy.bindings = kept
+    bucket.set_iam_policy(policy)
+    _logger.info(
+        "Removed public access from bucket",
+        extra={"finding_id": finding.get("name", ""), "bucket": bucket_name},
+    )
+    return {"action": "PUBLIC_BUCKET_ACL", "status": "SUCCESS"}
 
 
 def disable_open_firewall_rule(finding: Dict[str, Any]) -> Dict[str, Any]:
     """Disable a Compute Engine firewall rule that allows 0.0.0.0/0 on sensitive ports."""
-    resource = finding.get("resource", "")
+    resource = finding.get("resourceName", "")
     project_id = os.environ.get("PROJECT_ID")
     firewall_name = _extract_firewall_name(resource)
 
@@ -134,7 +148,7 @@ def disable_open_firewall_rule(finding: Dict[str, Any]) -> Dict[str, Any]:
         _logger.info(
             "Disabled open firewall rule",
             extra={
-                "finding_id": finding.get("findingId", ""),
+                "finding_id": finding.get("name", ""),
                 "firewall": firewall_name,
             },
         )
@@ -149,7 +163,7 @@ def disable_open_firewall_rule(finding: Dict[str, Any]) -> Dict[str, Any]:
 
 def remove_excess_service_account_roles(finding: Dict[str, Any]) -> Dict[str, Any]:
     """Remove excess predefined roles from a service account while retaining custom roles."""
-    resource = finding.get("resource", "")
+    resource = finding.get("resourceName", "")
     project_id = os.environ.get("PROJECT_ID")
     service_account_email = _extract_service_account_email(resource)
 
@@ -188,7 +202,7 @@ def remove_excess_service_account_roles(finding: Dict[str, Any]) -> Dict[str, An
         _logger.info(
             "Removed excess predefined roles",
             extra={
-                "finding_id": finding.get("findingId", ""),
+                "finding_id": finding.get("name", ""),
                 "service_account": service_account_email or "all",
             },
         )
@@ -207,6 +221,8 @@ def _extract_bucket_name(resource: str) -> str:
         return resource.replace("gs://", "").split("/")[0]
     if "buckets/" in resource:
         return resource.split("buckets/")[-1].split("/")[0]
+    if resource.startswith("//storage.googleapis.com/"):
+        return resource[len("//storage.googleapis.com/"):].split("/")[0]
     return resource
 
 
