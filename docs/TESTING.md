@@ -69,23 +69,23 @@ make test
 | `tests/test_classifier.py` | Severity mapping, class overrides, default behavior |
 | `tests/test_remediator.py` | Remediation handlers, unmapped CRITICAL skip, error handling |
 | `tests/test_notifier.py` | Brevo payload format, graceful failure, Secret Manager mocking |
-| `tests/test_main.py` | Pub/Sub parsing and entry-point orchestration |
+| `tests/test_main.py` | Pub/Sub CloudEvent parsing and entry-point orchestration |
 | `tests/test_integration.py` | End-to-end pipeline from Pub/Sub message to storage |
 
 ### Expected Output
 
-A successful run reports at least 20 passing tests with no failures or errors.
+A successful run reports 29 passing tests with no failures or errors.
 
 ```text
 ======================== test session starts ========================
 ...
-tests/test_classifier.py::test_critical PASSED
-tests/test_classifier.py::test_high PASSED
-tests/test_classifier.py::test_medium PASSED
-tests/test_classifier.py::test_override_elevates_to_critical PASSED
-tests/test_classifier.py::test_unknown_defaults_to_medium PASSED
+tests/test_classifier.py::test_classify_critical PASSED
+tests/test_classifier.py::test_classify_high PASSED
+tests/test_classifier.py::test_classify_medium PASSED
+tests/test_classifier.py::test_classify_override_elevates_public_bucket_to_critical PASSED
+tests/test_classifier.py::test_classify_unknown_severity_defaults_to_medium PASSED
 ...
-======================== 20+ passed in 1.23s ========================
+======================== 29 passed in 1.23s ========================
 ```
 
 ### Running a Single Test File
@@ -107,26 +107,40 @@ pytest tests/ --cov=src --cov-report=term-missing
 
 Use the `functions-framework` to emulate the Cloud Function locally without deploying to GCP.
 
-1. Start the emulator:
+1. Start the emulator in CloudEvent mode (the same mode Gen 2 + Eventarc uses in production):
 
    ```bash
    cd src
-   functions-framework --target=process_scc_finding --signature-type=event
+   functions-framework --target=process_scc_finding --signature-type=cloudevent
    ```
 
-   The emulator listens on `http://localhost:8080` by default.
+   The emulator listens on `http://localhost:8080` by default and loads the handler from `src/main.py`.
 
-2. In another terminal, publish a test event:
+2. In another terminal, publish a test event. Eventarc delivers Pub/Sub messages as structured CloudEvents, so POST a full CloudEvent envelope with the Pub/Sub message in `data.message.data` (base64-encoded):
 
    ```bash
-   cat > /tmp/test_event.json <<'EOF'
+   PAYLOAD=$(echo '{"finding":{"name":"projects/test/sources/123/findings/f1","resourceName":"//storage.googleapis.com/test-bucket","category":"PUBLIC_BUCKET_ACL","severity":"CRITICAL","findingClass":"MISCONFIGURATION","createTime":"2026-07-03T12:00:00Z"}}' | base64 -w0)
+
+   cat > /tmp/test_event.json <<EOF
    {
-     "data": "$(echo '{"finding":{"name":"projects/test/locations/global/findings/f1","resourceName":"//storage.googleapis.com/buckets/test-bucket","category":"PUBLIC_BUCKET_ACL","severity":"CRITICAL","findingClass":"MISCONFIGURATION","createTime":"2026-07-03T12:00:00Z"}}' | base64 -w0)"
+     "specversion": "1.0",
+     "id": "test-event-1",
+     "source": "//pubsub.googleapis.com/projects/test/topics/scc-findings",
+     "type": "google.cloud.pubsub.topic.v1.messagePublished",
+     "time": "2026-07-03T12:00:00Z",
+     "data": {
+       "message": {
+         "data": "$PAYLOAD",
+         "messageId": "test-message-1",
+         "publishTime": "2026-07-03T12:00:00Z"
+       },
+       "subscription": "projects/test/subscriptions/eventarc-scc-findings"
+     }
    }
    EOF
 
    curl -X POST http://localhost:8080 \
-     -H "Content-Type: application/json" \
+     -H "Content-Type: application/cloudevents+json" \
      -d @/tmp/test_event.json
    ```
 
@@ -137,7 +151,9 @@ Use the `functions-framework` to emulate the Cloud Function locally without depl
 | Symptom | Fix |
 |---|---|
 | `ImportError` on `google.cloud` | Install `src/requirements.txt` in the active virtual environment. |
+| `MissingTargetException` naming the entry point | Run `functions-framework` from the `src/` directory so it loads `src/main.py`, and confirm the target is `process_scc_finding`. |
 | `config.yaml not found` | Run `functions-framework` from the `src/` directory. |
+| `400` or parse error on POST | Send a structured CloudEvent (`--signature-type=cloudevent` with `Content-Type: application/cloudevents+json`), not a raw Pub/Sub JSON body. |
 | Brevo call fails | This is expected if no valid secret is configured; the function should log and return `200`. |
 
 ---
@@ -166,7 +182,7 @@ PAYLOAD=$(echo '{
     "resourceName": "//storage.googleapis.com/projects/_/buckets/test-bucket",
     "category": "PUBLIC_BUCKET_ACL",
     "severity": "CRITICAL",
-    "findingClass": "PUBLIC_BUCKET_ACL",
+    "findingClass": "MISCONFIGURATION",
     "createTime": "2026-07-03T12:00:00Z",
     "eventTime": "2026-07-03T12:00:00Z"
   }
