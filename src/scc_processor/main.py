@@ -7,8 +7,11 @@ License: MIT
 import base64
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict
+
+from cloudevents.http import CloudEvent
 
 from scc_processor.processors.classifier import classify_finding, _extract_finding_class
 from scc_processor.processors.notifier import send_alert
@@ -21,25 +24,28 @@ from scc_processor.utils.logger import get_logger
 _logger = get_logger()
 
 
-def process_scc_finding(event: Dict[str, Any], context: Any) -> str:
+def process_scc_finding(cloud_event: CloudEvent) -> str:
     """Cloud Function entry point for processing an SCC finding from Pub/Sub.
 
+    Gen 2 functions receive Eventarc events as a single CloudEvent argument.
+    For the ``google.cloud.pubsub.topic.v1.messagePublished`` event type,
+    ``cloud_event.data`` carries the Pub/Sub message payload.
+
     Args:
-        event: The Pub/Sub event payload.
-        context: The Cloud Functions runtime context.
+        cloud_event: The CloudEvent delivered by Eventarc.
 
     Returns:
-        "OK" on success. Unhandled exceptions propagate as 500 responses.
+        "OK" on success. Unhandled exceptions propagate so Eventarc retries.
     """
-    correlation_id = getattr(context, "event_id", "unknown")
+    correlation_id = str(cloud_event.get("id", "unknown"))
     _logger.info("Received Pub/Sub message", extra={"correlation_id": correlation_id})
 
-    finding = _parse_finding(event)
-    finding_id = finding.get("findingId", "unknown")
-    resource = finding.get("resource", "unknown")
-    resource_type = finding.get("resourceType", "unknown")
+    finding = _parse_finding(cloud_event)
+    finding_id = finding.get("name", "unknown")
+    resource = finding.get("resourceName", "unknown")
+    resource_type = _derive_resource_type(resource)
     finding_class = _extract_finding_class(finding)
-    project_id = finding.get("projectId", os.environ.get("PROJECT_ID", "unknown"))
+    project_id = _extract_project_id(finding)
 
     # Attach correlation ID to all downstream log records.
     extra = {"correlation_id": correlation_id, "finding_id": finding_id}
@@ -112,12 +118,14 @@ def process_scc_finding(event: Dict[str, Any], context: Any) -> str:
     return "OK"
 
 
-def _parse_finding(event: Dict[str, Any]) -> Dict[str, Any]:
+def _parse_finding(cloud_event: CloudEvent) -> Dict[str, Any]:
     """Decode and parse the Pub/Sub message payload into a finding dictionary."""
-    if "data" not in event:
-        raise ValueError("Pub/Sub event missing 'data' field")
+    data = cloud_event.data or {}
+    message = data.get("message") or {}
+    encoded = message.get("data")
+    if not encoded:
+        raise ValueError("Pub/Sub CloudEvent missing 'message.data' field")
 
-    encoded = event["data"]
     decoded = base64.b64decode(encoded).decode("utf-8")
     payload = json.loads(decoded)
 
@@ -131,3 +139,59 @@ def _parse_finding(event: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Parsed finding is not a dictionary")
 
     return finding
+
+
+def _extract_project_id(finding: Dict[str, Any]) -> str:
+    """Derive the GCP project ID for a finding.
+
+    Real SCC findings carry no top-level projectId. The project is taken from
+    sourceProperties when the detector provides it, otherwise parsed from the
+    resourceName or finding name (``.../projects/<project>/...``). Falls back
+    to the function's own PROJECT_ID environment variable.
+    """
+    source_properties = finding.get("sourceProperties")
+    if isinstance(source_properties, dict):
+        for key in ("projectId", "project_id", "ProjectId"):
+            value = source_properties.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+    for field in (finding.get("resourceName", ""), finding.get("name", "")):
+        match = re.search(r"projects/([^/]+)", str(field))
+        if match:
+            return match.group(1)
+
+    return os.environ.get("PROJECT_ID", "unknown")
+
+
+# Cloud Asset collection path segments mapped to their resource type kind.
+_COLLECTION_KIND_MAP = {
+    "buckets": "Bucket",
+    "firewalls": "Firewall",
+    "serviceAccounts": "ServiceAccount",
+    "instances": "Instance",
+    "datasets": "Dataset",
+}
+
+
+def _derive_resource_type(resource_name: str) -> str:
+    """Derive a resource type from a Cloud Asset-style resourceName.
+
+    Examples:
+        //storage.googleapis.com/my-bucket -> storage.googleapis.com/Bucket
+        //compute.googleapis.com/projects/p/global/firewalls/fw -> compute.googleapis.com/Firewall
+    """
+    if not isinstance(resource_name, str) or not resource_name.startswith("//"):
+        return "unknown"
+
+    parts = resource_name[2:].split("/")
+    service = parts[0]
+    for segment in parts[1:-1]:
+        kind = _COLLECTION_KIND_MAP.get(segment)
+        if kind:
+            return f"{service}/{kind}"
+
+    # Buckets sit directly under the service with no collection segment.
+    if service == "storage.googleapis.com" and len(parts) == 2:
+        return "storage.googleapis.com/Bucket"
+    return service
