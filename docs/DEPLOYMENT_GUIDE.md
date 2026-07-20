@@ -243,7 +243,7 @@ Wait 60 seconds, then re-run `terraform apply`.
 **Check:**
 
 - The `src/` directory contains `main.py`, `requirements.txt`, and `config.yaml`.
-- `main.py` defines the entry point `process_finding`.
+- `main.py` exposes the entry point `process_scc_finding` (re-exported from the `scc_processor` package).
 - The `functions-framework` dependency is present in `requirements.txt`.
 - The Cloud Build API (`cloudbuild.googleapis.com`) is enabled.
 
