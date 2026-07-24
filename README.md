@@ -139,7 +139,9 @@ Target monthly cost is **under $5**, with a hard ceiling of **$20/month** and a 
 
 At 10,000 findings/month with an average execution time of **2 seconds**, the workload still sits within the Cloud Functions Gen 2 free tier, so compute cost remains **$0**. A detailed, GB-second–verified model with sensitivity analysis is in [`context/COST_ANALYSIS.md`](context/COST_ANALYSIS.md).
 
-> **Cost model update:** The v0.1.2 hardening pass added VPC, Cloud NAT, Cloud KMS, access logging, and additional monitoring. These controls intentionally exceed the original under-\$5 demo target in favor of production-grade security. The `$20/month` ceiling and billing alert at `$15/month` remain in place.
+> **Cost model update (v0.1.2):** The hardening pass added VPC, Cloud NAT, Cloud KMS, access logging, and additional monitoring. These controls intentionally exceed the original under-\$5 demo target in favor of production-grade security. The `$20/month` ceiling and billing alert at `$15/month` remain in place.
+>
+> **Superseded by [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md).** The VPC, Serverless VPC Access connector, Cloud Router, and Cloud NAT are gone. A cost trace found the VPC held no resources and its subnet was orphaned. The connector could not scale to zero either: `min_throughput = 200` forces a floor of 2 e2-micro instances no matter what `min_instances` is set to. Its only job was routing egress to `api.brevo.com`, which authenticates by API key rather than source IP. Removing it cut roughly \$14 to \$47 per month of idle compute and put the project back under the \$5 target. Cloud KMS, access logging, and the monitoring alerts stay.
 
 ---
 
@@ -186,7 +188,7 @@ See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for a fresh-GCP-proje
 - **Least-privilege IAM.** The Cloud Function runs under a dedicated service account with a custom remediation role.
 - **Publisher-restricted Pub/Sub topic.** Only the SCC notification service account can publish to `scc-findings`.
 - **All source passes** `bandit`, `pip-audit`, `Checkov` (62 passed, 0 failed, 1 documented skip), and `truffleHog` scans in CI. See `CHECKOV_SKIP.md` for the single intentional skip.
-- **Production hardening added:** VPC with Cloud NAT, CMEK via Cloud KMS, access logging, deletion protection, secret environment variables, and ingress restricted to internal-only.
+- **Production hardening in the Terraform baseline:** CMEK via Cloud KMS, access logging, deletion protection, secret environment variables, and ingress restricted to internal-only. The VPC and Cloud NAT added in the same pass were later removed once a cost trace of the plan showed they would carry no traffic worth controlling. See [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md).
 
 ### Known Risks in v0.1.0
 
