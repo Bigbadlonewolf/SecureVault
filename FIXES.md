@@ -27,6 +27,8 @@ This document records the defects resolved and the production-grade hardening ap
 
 ## 3. Terraform: VPC and Egress Controls
 
+> **Reverted.** Everything in this section was removed by [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md), implemented 2026-07-28. A cost trace found the VPC held no resources, so the connector routed traffic into an empty network and straight back out through NAT. The record below stands as history of what v0.1.2 did, not as a description of the current `terraform/`.
+
 **Defects addressed:**
 
 - `CKV2_GCP_18` — VPC network had no custom firewall rule.
@@ -140,7 +142,7 @@ This document records the defects resolved and the production-grade hardening ap
 ## Validation Summary
 
 | Check | Result |
-|---|---|
+| --- | --- |
 | `pytest -q` | 23 passed |
 | `terraform validate` | Success |
 | `terraform fmt -recursive` | Formatted |

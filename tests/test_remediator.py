@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from google.api_core.iam import Policy
 
+from scc_processor.processors import remediator
 from scc_processor.processors.remediator import remediate
 
 
@@ -184,3 +185,29 @@ def test_over_privileged_sa_is_not_auto_remediated():
 
     assert result["status"] == "SKIPPED_UNMAPPED"
     assert result["action"] == "NONE"
+
+
+def test_over_privileged_sa_is_absent_from_the_auto_remediation_map():
+    """ADR-004: the class must not be routable, not merely unrouted today.
+
+    The behavioural test above passes for the wrong reason if someone adds the
+    class back to _AUTO_REMEDIATION_CLASSES pointing at a no-op. This asserts
+    the map itself.
+    """
+    assert "OVER_PRIVILEGED_SA" not in remediator._AUTO_REMEDIATION_CLASSES
+
+
+def test_no_service_account_role_handler_is_registered():
+    """ADR-004: no handler may strip roles from a service account.
+
+    remove_excess_service_account_roles removed every binding matching
+    `roles/` — including the primitives its docstring claimed to keep — because
+    SCC's finding never identifies which grant is the excessive one. Re-adding
+    any handler that touches service-account roles needs its own ADR first.
+    """
+    assert not hasattr(remediator, "remove_excess_service_account_roles")
+
+    for handler_name in remediator._AUTO_REMEDIATION_CLASSES.values():
+        handler = remediator._get_handler(handler_name)
+        assert "service_account" not in handler.__name__
+        assert "role" not in handler.__name__

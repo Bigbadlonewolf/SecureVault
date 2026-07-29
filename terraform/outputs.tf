@@ -46,11 +46,6 @@ output "kms_key" {
   value       = google_kms_crypto_key.securevault.id
 }
 
-output "vpc_connector" {
-  description = "VPC connector assigned to the Cloud Function"
-  value       = google_vpc_access_connector.securevault.id
-}
-
 output "secret_brevo_api_key" {
   description = "Secret Manager secret ID for the Brevo API key"
   value       = google_secret_manager_secret.brevo_api_key.secret_id

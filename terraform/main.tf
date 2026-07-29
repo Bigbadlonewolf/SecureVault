@@ -29,41 +29,22 @@ locals {
 }
 
 #-------------------------------------------------------------------------------
-# VPC for private Cloud Function egress
+# No VPC. Cloud Function egress goes over Google-managed networking.
+#
+# ADR-009 removed google_compute_network, google_compute_subnetwork,
+# google_compute_firewall.deny_all_ingress, google_vpc_access_connector,
+# google_compute_router, and google_compute_router_nat from this file.
+#
+# The VPC held no resources — no Cloud SQL, no Memorystore, no VMs — so the
+# connector existed to reach private resources that did not exist. The only
+# external egress target in the codebase is https://api.brevo.com; everything
+# else is Google APIs, reachable without VPC egress. The connector and NAT were
+# load-bearing for each other, not for the workload.
+#
+# ingress_settings = "ALLOW_INTERNAL_ONLY" is retained on the function and is
+# independent of the connector. compute.googleapis.com stays enabled — the
+# OPEN_FIREWALL remediation action needs it.
 #-------------------------------------------------------------------------------
-resource "google_compute_network" "securevault" {
-  name                    = "securevault-network"
-  auto_create_subnetworks = false
-}
-
-resource "google_compute_firewall" "deny_all_ingress" {
-  name        = "securevault-deny-all-ingress"
-  network     = google_compute_network.securevault.name
-  direction   = "INGRESS"
-  priority    = 1000
-  description = "Default deny-all ingress for the SecureVault VPC"
-
-  deny {
-    protocol = "all"
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-}
-
-resource "google_compute_subnetwork" "securevault" {
-  name                       = "securevault-subnet"
-  ip_cidr_range              = "10.0.0.0/28"
-  region                     = var.region
-  network                    = google_compute_network.securevault.id
-  private_ip_google_access   = true
-  private_ipv6_google_access = "ENABLE_OUTBOUND_VM_ACCESS_TO_GOOGLE"
-
-  log_config {
-    aggregation_interval = "INTERVAL_5_SEC"
-    flow_sampling        = 0.5
-    metadata             = "INCLUDE_ALL_METADATA"
-  }
-}
 
 #-------------------------------------------------------------------------------
 # KMS key ring and CMEK key
@@ -105,42 +86,6 @@ resource "google_kms_crypto_key_iam_member" "pubsub_encrypt_decrypt" {
   crypto_key_id = google_kms_crypto_key.securevault.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
-}
-
-#-------------------------------------------------------------------------------
-# VPC connector for the Cloud Function
-#-------------------------------------------------------------------------------
-resource "google_vpc_access_connector" "securevault" {
-  name          = "securevault-connector"
-  region        = var.region
-  network       = google_compute_network.securevault.id
-  ip_cidr_range = "10.0.1.0/28"
-  min_instances = 2
-  max_instances = 2
-}
-
-#-------------------------------------------------------------------------------
-# Cloud Router + NAT for controlled egress from the VPC connector subnet
-#-------------------------------------------------------------------------------
-resource "google_compute_router" "securevault" {
-  name    = "securevault-router"
-  region  = var.region
-  network = google_compute_network.securevault.id
-}
-
-resource "google_compute_router_nat" "securevault" {
-  name                               = "securevault-nat"
-  router                             = google_compute_router.securevault.name
-  region                             = var.region
-  nat_ip_allocate_option             = "AUTO_ONLY"
-  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
-
-  log_config {
-    enable = true
-    filter = "ERRORS_ONLY"
-  }
-
-  depends_on = [google_compute_router.securevault]
 }
 
 #-------------------------------------------------------------------------------
@@ -297,14 +242,12 @@ resource "google_cloudfunctions2_function" "scc_processor" {
   }
 
   service_config {
-    available_memory              = "256M"
-    timeout_seconds               = 60
-    max_instance_count            = 10
-    min_instance_count            = 0
-    ingress_settings              = "ALLOW_INTERNAL_ONLY"
-    vpc_connector_egress_settings = "ALL_TRAFFIC"
-    service_account_email         = google_service_account.scc_processor.email
-    vpc_connector                 = google_vpc_access_connector.securevault.id
+    available_memory      = "256M"
+    timeout_seconds       = 60
+    max_instance_count    = 10
+    min_instance_count    = 0
+    ingress_settings      = "ALLOW_INTERNAL_ONLY"
+    service_account_email = google_service_account.scc_processor.email
 
     environment_variables = {
       PROJECT_ID       = var.project_id
@@ -675,8 +618,8 @@ resource "google_project_service" "services" {
     "cloudasset.googleapis.com",
     "iam.googleapis.com",
     "cloudkms.googleapis.com",
+    # Retained after ADR-009: the OPEN_FIREWALL remediation action needs it.
     "compute.googleapis.com",
-    "vpcaccess.googleapis.com",
   ])
 
   project            = var.project_id

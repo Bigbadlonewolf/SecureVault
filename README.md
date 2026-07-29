@@ -225,7 +225,7 @@ See [`SECURITY.md`](SECURITY.md) and [`context/THREAT_MODEL.md`](context/THREAT_
 | [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) | Step-by-step deployment for a fresh GCP project |
 | [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md) | 2 a.m. incident response procedures |
 | [`docs/TESTING.md`](docs/TESTING.md) | Local and GCP testing instructions |
-| [`docs/INTERVIEW_WALKTHROUGH.md`](docs/INTERVIEW_WALKTHROUGH.md) | 15-minute narrative for panel defense |
+| [`docs/SCALE_ARCHITECTURE.md`](docs/SCALE_ARCHITECTURE.md) | What changes at 500 projects, and what does not. Failure modes, RTO, cost at scale |
 | [`context/THREAT_MODEL.md`](context/THREAT_MODEL.md) | Threat actors, trust boundaries, attack scenarios |
 | [`context/COMPLIANCE_MAPPING.md`](context/COMPLIANCE_MAPPING.md) | NIST, PCI DSS, and SOC 2 mappings |
 | [`context/COST_ANALYSIS.md`](context/COST_ANALYSIS.md) | GB-second–verified cost model and sensitivity analysis |

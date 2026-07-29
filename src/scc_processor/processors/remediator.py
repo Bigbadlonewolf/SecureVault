@@ -7,7 +7,7 @@ License: MIT
 import os
 from typing import Any, Callable, Dict, List
 
-from google.cloud import compute_v1, resourcemanager_v3, storage
+from google.cloud import compute_v1, storage
 
 from scc_processor.processors.classifier import _extract_finding_class
 from scc_processor.utils.logger import get_logger
@@ -70,7 +70,6 @@ def _get_handler(name: str) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     handlers = {
         "remove_public_bucket_access": remove_public_bucket_access,
         "disable_open_firewall_rule": disable_open_firewall_rule,
-        "remove_excess_service_account_roles": remove_excess_service_account_roles,
     }
     return handlers[name]
 
@@ -161,58 +160,22 @@ def disable_open_firewall_rule(finding: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def remove_excess_service_account_roles(finding: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove excess predefined roles from a service account while retaining custom roles."""
-    resource = finding.get("resourceName", "")
-    project_id = os.environ.get("PROJECT_ID")
-    service_account_email = _extract_service_account_email(resource)
-
-    if not project_id:
-        return {
-            "action": "OVER_PRIVILEGED_SA",
-            "status": "FAILURE",
-            "error": "Missing PROJECT_ID",
-        }
-
-    client = resourcemanager_v3.ProjectsClient()
-    project_name = f"projects/{project_id}"
-
-    policy = client.get_iam_policy(request={"resource": project_name})
-
-    modified = False
-    for binding in policy.bindings:
-        if not binding.members:
-            continue
-        if service_account_email and service_account_email not in binding.members:
-            continue
-        if binding.role and binding.role.startswith("roles/"):
-            # Remove predefined roles; retain custom roles and primitive roles.
-            members_to_remove = [
-                m
-                for m in binding.members
-                if (not service_account_email or m == service_account_email)
-                and _is_predefined_role(binding.role)
-            ]
-            for member in members_to_remove:
-                binding.members.remove(member)
-                modified = True
-
-    if modified:
-        client.set_iam_policy(request={"resource": project_name, "policy": policy})
-        _logger.info(
-            "Removed excess predefined roles",
-            extra={
-                "finding_id": finding.get("name", ""),
-                "service_account": service_account_email or "all",
-            },
-        )
-        return {"action": "OVER_PRIVILEGED_SA", "status": "SUCCESS"}
-
-    return {
-        "action": "OVER_PRIVILEGED_SA",
-        "status": "SKIPPED",
-        "message": "No excess predefined roles found",
-    }
+# NOTE: `remove_excess_service_account_roles` was removed here (ADR-004).
+#
+# It stripped every binding matching `roles/` from the flagged service account,
+# which includes the primitive roles its own docstring claimed to retain.
+# SCC's OVER_PRIVILEGED_SERVICE_ACCOUNT finding does not say *which* role is
+# excessive, so the handler could only ever remove all of them — a wider blast
+# radius than the finding it was answering, unattended, on a CRITICAL trigger.
+#
+# It was already unreachable: `_AUTO_REMEDIATION_CLASSES` omits the class, and
+# so does `CRITICAL.auto_remediate` in `src/config.yaml`. Deleting it removes
+# the third path — a future refactor re-registering it by name.
+#
+# OVER_PRIVILEGED_SA stays alert-only. Restoring auto-remediation needs a data
+# source that identifies the specific excessive grant, and its own ADR.
+# Guarded by `test_over_privileged_sa_is_not_auto_remediated` and
+# `test_no_service_account_role_handler_is_registered`.
 
 
 def _extract_bucket_name(resource: str) -> str:
@@ -233,13 +196,6 @@ def _extract_firewall_name(resource: str) -> str:
     return resource
 
 
-def _extract_service_account_email(resource: str) -> str:
-    """Extract a service account email from a GCP resource identifier."""
-    if "serviceAccounts/" in resource:
-        return resource.split("serviceAccounts/")[-1].split("/")[0]
-    return resource
-
-
 def _is_overly_permissive(rule: compute_v1.Firewall) -> bool:
     """Return True if the firewall rule allows 0.0.0.0/0 on sensitive ports."""
     if not rule.source_ranges:
@@ -257,8 +213,3 @@ def _is_overly_permissive(rule: compute_v1.Firewall) -> bool:
             return True
 
     return any(port in sensitive_ports for port in allowed_ports)
-
-
-def _is_predefined_role(role: str) -> bool:
-    """Return True if the role is a GCP predefined role (roles/<name>)."""
-    return role.startswith("roles/")
