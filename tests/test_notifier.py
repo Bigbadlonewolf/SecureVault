@@ -37,7 +37,7 @@ def test_email_payload_format(mock_requests, base_finding, env_vars):
     call_args = mock_requests.post.call_args
     payload = call_args.kwargs["json"]
     assert "[SecureVault] CRITICAL: OPEN_FIREWALL" in payload["subject"]
-    assert payload["to"][0]["email"] == "Lanreoluokunigbadwolf@gmail.com"
+    assert payload["to"][0]["email"] == "alerts@example.com"
     assert "OPEN_FIREWALL" in payload["textContent"]
     assert "SUCCESS" in payload["textContent"]
 

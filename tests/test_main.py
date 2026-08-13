@@ -12,7 +12,7 @@ from cloudevents.http import CloudEvent
 
 from scc_processor.main import process_scc_finding
 
-_PROJECT = "mythical-cider-496423-h6"
+_PROJECT = "test-project-id"
 
 
 def _pubsub_cloudevent(payload: dict) -> CloudEvent:

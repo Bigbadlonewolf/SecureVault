@@ -1,4 +1,4 @@
-project_id = "mythical-cider-496423-h6"
+project_id = "CHANGEME_PROJECT_ID"
 region     = "us-central1"
 
 # Firestore location. Use a regional value that matches your region or a multi-region like nam5.
