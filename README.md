@@ -113,7 +113,7 @@ The full threat model is in [`context/THREAT_MODEL.md`](context/THREAT_MODEL.md)
 
 | Scenario | Inherent Risk | Residual Risk | Primary Control |
 |---|---|---|---|
-| Poisoned / spoofed finding injection | High | Low | Pub/Sub publisher restricted to SCC notification SA; unmapped CRITICAL findings alert only |
+| Poisoned / spoofed finding injection | High | **Medium** | Unmapped CRITICAL findings alert only; schema validation. The SCC publisher restriction is **not deployed** — it needs SCC Premium (see `context/THREAT_MODEL.md`) |
 | Privilege escalation via auto-remediation | Critical | Low | Dedicated service account + custom least-privilege role; no destructive create/bind permissions |
 | Alert suppression / notification failure | Medium | Low | Cloud Monitoring error-rate alert; graceful Brevo degradation; independent logging |
 | Supply-chain compromise | Medium | Low–Medium | Pinned dependencies; `bandit`, `pip-audit`, `Checkov`, `truffleHog`; `CODEOWNERS` |

@@ -46,7 +46,7 @@ flowchart LR
 
 | Boundary | Components | Authentication | Blast Radius if Compromised |
 |---|---|---|---|
-| TB0 — SCC control plane | Security Command Center → Pub/Sub | SCC notification service account with `roles/pubsub.publisher` on `scc-findings` only | Attacker could inject poisoned findings or suppress real ones. |
+| TB0 — SCC control plane | Security Command Center → Pub/Sub | **Not deployed.** Requires SCC Premium; no publisher binding exists, so publishing is bounded only by project-level `pubsub.publisher` | Attacker could inject poisoned findings or suppress real ones. |
 | TB1 — Project perimeter | Pub/Sub → Cloud Function | Function service account with `roles/pubsub.subscriber` via event trigger | Attacker could read backlog or replay stale messages. |
 | TB2 — Function runtime | Function code → downstream services | Dedicated service account `scc-processor@` with least-privilege IAM | Attacker could auto-remediate, exfiltrate secrets, or suppress alerts. |
 | TB3 — External alerting | Function → Brevo | HTTPS + Secret Manager API key | Attacker could disable alerting or send phishing alerts. |
@@ -69,12 +69,12 @@ flowchart LR
 | Attribute | Rating |
 |---|---|
 | Inherent risk | **High** |
-| Residual risk (with mitigations) | **Low** |
+| Residual risk (with mitigations) | **Medium** — raised from Low on 2026-08-17 when the publisher restriction proved undeployable without SCC Premium |
 
 **Mitigations:**
 
-- The Pub/Sub topic grants `roles/pubsub.publisher` only to the SCC notification service account (`gcp-sa-scc-notification.iam.gserviceaccount.com`).
-- The default compute service account is explicitly denied access to the topic.
+- **This control is designed but not deployed.** The intent is to grant `roles/pubsub.publisher` only to the SCC notification service account (`gcp-sa-scc-notification.iam.gserviceaccount.com`). That service agent is minted only when an SCC notification config is created, which requires Security Command Center Premium; on a Standard-tier project the binding fails at apply with "Service account ... does not exist", so it was removed from `terraform/`. The topic currently carries **no explicit publisher binding**, leaving publishing bounded only by project-level `pubsub.publisher` — materially weaker than a single named publisher. Restore the binding and the notification config together if Premium is enabled.
+- There is **no** explicit deny on the default compute service account. No such binding exists in `terraform/`; this document previously claimed one that was never implemented.
 - The response matrix limits auto-remediation to two well-understood finding classes; any unmapped CRITICAL finding is alerted on but **not** auto-remediated.
 - All publish attempts are recorded in Cloud Audit Logs for anomaly detection.
 - Finding schema validation in `processors/classifier.py` rejects malformed payloads.
@@ -94,9 +94,10 @@ flowchart LR
 - A custom IAM role (`securevault.remediator`) is scoped to remediation-adjacent permissions:
   - `storage.buckets.get`, `storage.buckets.setIamPolicy`
   - `compute.firewalls.get`, `compute.firewalls.update`
-  - `iam.serviceAccounts.get`, `iam.serviceAccounts.setIamPolicy`
-  - `resourcemanager.projects.getIamPolicy`, `resourcemanager.projects.setIamPolicy`
-- **Only the first two permission pairs are currently exercised.** `PUBLIC_BUCKET_ACL` and `OPEN_FIREWALL` are the two auto-remediated classes (see ADR-004). The IAM/resourcemanager permissions above remain provisioned for a service-account remediation handler that exists in source but is deliberately excluded from the response matrix — tracked as technical debt to revoke from the Terraform role once the handler is either scoped safely or deleted.
+  - `iam.serviceAccounts.get`
+  - `resourcemanager.projects.getIamPolicy`
+- **Only the first two permission pairs are exercised**, and they are now the only write permissions in the role. `PUBLIC_BUCKET_ACL` and `OPEN_FIREWALL` are the two auto-remediated classes (see ADR-004).
+- **The IAM-write debt is closed.** `iam.serviceAccounts.setIamPolicy` and `resourcemanager.projects.setIamPolicy` were provisioned for `remove_excess_service_account_roles`, the `OVER_PRIVILEGED_SA` handler ADR-004 excluded from the response matrix. That handler was deleted in v0.1.4 (`EVOLUTION.md`), and `test_no_service_account_role_handler_is_registered` prevents its return, so both permissions were revoked from the Terraform role. The function's service account now holds no permission that can rewrite a project or service-account IAM policy. The two reads that remain are orphaned in the same way but confer no write capability; they are kept only so a future scoped handler does not need a role change to inspect state.
 - No `roles/owner`, `roles/editor`, or broad `resourcemanager.*` permissions are assigned.
 - The function does **not** create new bindings; the two active handlers only remove `allUsers` / `allAuthenticatedUsers` from buckets and disable overly permissive firewall rules.
 - Every remediation action is written to Firestore and BigQuery with a timestamp and outcome, producing an immutable audit trail.
@@ -148,6 +149,7 @@ flowchart LR
 **Mitigations:**
 
 - Secrets are never stored in source code, environment variables, or Terraform state.
+- The secret is encrypted with the project CMEK (`securevault-key`), not a Google-managed key. This requires a user-managed replication policy pinned to `var.region`, because CMEK under an automatic policy needs a key in the `global` KMS location and `securevault-keyring` is regional. Revoking the Secret Manager service agent's access to the key renders the secret unreadable — a kill switch that Google-managed encryption does not provide.
 - The function service account holds only `roles/secretmanager.secretAccessor` for the single Brevo secret.
 - Secret Manager access is logged in Cloud Audit Logs.
 - The placeholder secret version created by Terraform is disabled and intended to be replaced via `gcloud` or the console.
@@ -156,7 +158,7 @@ flowchart LR
 
 | Scenario | Inherent Risk | Residual Risk | Primary Mitigation |
 |---|---|---|---|
-| Poisoned finding injection | High | Low | Publisher-restricted Pub/Sub topic + unmapped CRITICAL alert-only default |
+| Poisoned finding injection | High | **Medium** | Unmapped CRITICAL alert-only default + schema validation. Publisher restriction **not deployed** (needs SCC Premium) |
 | Privilege escalation via remediation | Critical | Low | Dedicated SA + custom least-privilege role + no destructive create/bind permissions |
 | Alert suppression / notification failure | Medium | Low | Cloud Monitoring alert policy + logging fallback + graceful Brevo degradation |
 | Supply-chain compromise | Medium | Low–Medium | Pinned dependencies + SAST/IaC scanning + CODEOWNERS |

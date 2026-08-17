@@ -8,6 +8,13 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    # google-beta exists solely for google_project_service_identity, which is
+    # beta-only in provider 5.x. See the service-agent block below for why the
+    # CMEK grants cannot be written without it.
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 5.0"
+    }
     archive = {
       source  = "hashicorp/archive"
       version = "~> 2.0"
@@ -16,6 +23,11 @@ terraform {
 }
 
 provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "google-beta" {
   project = var.project_id
   region  = var.region
 }
@@ -52,6 +64,11 @@ locals {
 resource "google_kms_key_ring" "securevault" {
   name     = "securevault-keyring"
   location = var.region
+
+  # cloudkms.googleapis.com is not enabled on a fresh project, and Terraform would
+  # otherwise create this in parallel with enabling it. Every resource below that
+  # touches a non-default API carries the same guard.
+  depends_on = [google_project_service.services]
 }
 
 resource "google_kms_crypto_key" "securevault" {
@@ -67,25 +84,74 @@ resource "google_kms_crypto_key" "securevault" {
   labels = local.common_labels
 }
 
+#-------------------------------------------------------------------------------
+# Service agents (P4SAs) for the four services that encrypt with the CMEK key.
+#
+# These four blocks exist because a per-service agent is NOT guaranteed to exist
+# just because its API is enabled. Constructing the address by string
+# interpolation from the project number — which this file used to do — produces a
+# well-formed principal that may name no account, and an IAM binding to a
+# non-existent principal fails at apply. terraform validate cannot see this,
+# because the string is syntactically perfect.
+#
+# Secret Manager is the hard case: its agent is never created implicitly at all.
+# Google documents `gcloud beta services identity create --service=
+# secretmanager.googleapis.com` as a required step before granting CMEK access
+# (cloud.google.com/secret-manager/docs/cmek). google_project_service_identity is
+# the Terraform equivalent, and is beta-only in provider 5.x — the sole reason
+# google-beta is declared above.
+#
+# Storage and BigQuery have GA data sources that both look up and trigger
+# creation of their agents, so they need no beta provider.
+#-------------------------------------------------------------------------------
+resource "google_project_service_identity" "secretmanager" {
+  provider = google-beta
+  service  = "secretmanager.googleapis.com"
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_project_service_identity" "pubsub" {
+  provider = google-beta
+  service  = "pubsub.googleapis.com"
+
+  depends_on = [google_project_service.services]
+}
+
+data "google_storage_project_service_account" "gcs" {
+  depends_on = [google_project_service.services]
+}
+
+data "google_bigquery_default_service_account" "bq" {
+  depends_on = [google_project_service.services]
+}
+
 # Grant BigQuery service account access to the CMEK key.
 resource "google_kms_crypto_key_iam_member" "bigquery_encrypt_decrypt" {
   crypto_key_id = google_kms_crypto_key.securevault.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:bq-${data.google_project.project.number}@bigquery-encryption.iam.gserviceaccount.com"
+  member        = "serviceAccount:${data.google_bigquery_default_service_account.bq.email}"
 }
 
 # Grant Cloud Storage service account access to the CMEK key.
 resource "google_kms_crypto_key_iam_member" "storage_encrypt_decrypt" {
   crypto_key_id = google_kms_crypto_key.securevault.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${data.google_project.project.number}@gs-project-accounts.iam.gserviceaccount.com"
+  member        = "serviceAccount:${data.google_storage_project_service_account.gcs.email_address}"
 }
 
 # Grant Pub/Sub service account access to the CMEK key.
 resource "google_kms_crypto_key_iam_member" "pubsub_encrypt_decrypt" {
   crypto_key_id = google_kms_crypto_key.securevault.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  member        = "serviceAccount:${google_project_service_identity.pubsub.email}"
+}
+
+# Grant Secret Manager service account access to the CMEK key.
+resource "google_kms_crypto_key_iam_member" "secretmanager_encrypt_decrypt" {
+  crypto_key_id = google_kms_crypto_key.securevault.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${google_project_service_identity.secretmanager.email}"
 }
 
 #-------------------------------------------------------------------------------
@@ -97,6 +163,8 @@ resource "google_service_account" "scc_processor" {
   account_id   = "scc-processor"
   display_name = "SecureVault SCC Processor Function"
   description  = "Dedicated runtime identity for the scc-processor Cloud Function"
+
+  depends_on = [google_project_service.services]
 }
 
 #-------------------------------------------------------------------------------
@@ -111,16 +179,27 @@ resource "google_pubsub_topic" "scc_findings" {
   kms_key_name = google_kms_crypto_key.securevault.id
 
   labels = local.common_labels
+
+  depends_on = [
+    google_kms_crypto_key_iam_member.pubsub_encrypt_decrypt,
+    google_project_service.services,
+  ]
 }
 
-# Restrict publishers to SCC notification service account only.
-# The SCC notification service account is a Google-managed identity of the form
-# service-{PROJECT_NUMBER}@gcp-sa-scc-notification.iam.gserviceaccount.com.
-resource "google_pubsub_topic_iam_member" "scc_publisher" {
-  topic  = google_pubsub_topic.scc_findings.name
-  role   = "roles/pubsub.publisher"
-  member = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-scc-notification.iam.gserviceaccount.com"
-}
+# Deliberate absence: no publisher IAM binding for SCC, and no
+# google_scc_notification_config anywhere in this repo.
+#
+# SCC continuous export to Pub/Sub requires Security Command Center Premium and
+# org-level configuration. The service agent that would publish here,
+# service-{PROJECT_NUMBER}@gcp-sa-scc-notification.iam.gserviceaccount.com, is
+# only minted when a notification config is created. Binding it on a
+# Standard-tier project fails at apply with "Service account ... does not
+# exist" — the address interpolates cleanly from the project number and names
+# nothing, which terraform validate cannot detect.
+#
+# The topic therefore has no explicit publisher grant. Publishing is limited to
+# principals holding pubsub.publisher at the project level. If Premium is ever
+# enabled, add the notification config and this binding together.
 
 #-------------------------------------------------------------------------------
 # Secret Manager: Brevo API key
@@ -131,11 +210,31 @@ resource "google_pubsub_topic_iam_member" "scc_publisher" {
 resource "google_secret_manager_secret" "brevo_api_key" {
   secret_id = "brevo-api-key"
 
+  # User-managed replication, not auto. CMEK under an automatic replication policy
+  # requires a KMS key in the `global` location, and securevault-keyring is regional
+  # (var.region). Pinning one replica to var.region lets this secret use the same
+  # securevault-key as every other data store instead of forcing a second key ring —
+  # and key rings can never be deleted, so declining to create one is the point.
+  # The function runs in var.region, so a co-located single replica is also the
+  # correct residency answer, not a compromise.
   replication {
-    auto {}
+    user_managed {
+      replicas {
+        location = var.region
+
+        customer_managed_encryption {
+          kms_key_name = google_kms_crypto_key.securevault.id
+        }
+      }
+    }
   }
 
   labels = local.common_labels
+
+  depends_on = [
+    google_kms_crypto_key_iam_member.secretmanager_encrypt_decrypt,
+    google_project_service.services,
+  ]
 }
 
 # Allow the function runtime to mount the secret via secret_environment_variables.
@@ -170,6 +269,7 @@ resource "google_storage_bucket" "source_logs" {
 
   depends_on = [
     google_kms_crypto_key_iam_member.storage_encrypt_decrypt,
+    google_project_service.services,
   ]
 }
 
@@ -177,7 +277,10 @@ resource "google_storage_bucket" "source_logs" {
 resource "google_storage_bucket_iam_member" "source_logs_analytics_writer" {
   bucket = google_storage_bucket.source_logs.name
   role   = "roles/storage.legacyBucketWriter"
-  member = "serviceAccount:cloud-storage-analytics@google.com"
+  # cloud-storage-analytics@google.com is a Google group, not a service account.
+  # The serviceAccount: prefix is rejected at apply with "was marked as a
+  # serviceAccount but is actually a user, invalid".
+  member = "group:cloud-storage-analytics@google.com"
 }
 
 resource "google_storage_bucket" "source" {
@@ -206,6 +309,7 @@ resource "google_storage_bucket" "source" {
   depends_on = [
     google_kms_crypto_key_iam_member.storage_encrypt_decrypt,
     google_storage_bucket_iam_member.source_logs_analytics_writer,
+    google_project_service.services,
   ]
 }
 
@@ -314,6 +418,7 @@ resource "google_bigquery_dataset" "analytics" {
 
   depends_on = [
     google_kms_crypto_key_iam_member.bigquery_encrypt_decrypt,
+    google_project_service.services,
   ]
 }
 
@@ -398,12 +503,19 @@ resource "google_project_iam_custom_role" "remediation" {
     # Compute: disable open firewall rules
     "compute.firewalls.get",
     "compute.firewalls.update",
-    # IAM: remove excess roles from service accounts
+    # IAM: read-only. The two setIamPolicy permissions that used to sit here were
+    # provisioned for remove_excess_service_account_roles, the OVER_PRIVILEGED_SA
+    # handler that ADR-004 excluded and v0.1.4 deleted (EVOLUTION.md). THREAT_MODEL.md
+    # tracked them as debt "to revoke from the Terraform role once the handler is
+    # either scoped safely or deleted" — the handler is gone, so they are revoked.
+    # Granting a Cloud Function service account project-wide setIamPolicy for a code
+    # path that no longer exists is standing privilege with nothing behind it.
+    # The two reads below are equally orphaned but grant no write capability.
     "iam.serviceAccounts.get",
-    "iam.serviceAccounts.setIamPolicy",
     "resourcemanager.projects.getIamPolicy",
-    "resourcemanager.projects.setIamPolicy",
   ]
+
+  depends_on = [google_project_service.services]
 }
 
 resource "google_project_iam_member" "function_remediator" {
@@ -440,6 +552,8 @@ resource "google_logging_metric" "securevault_finding" {
     "severity"      = "EXTRACT(jsonPayload.finding_severity)"
     "finding_class" = "EXTRACT(jsonPayload.finding_class)"
   }
+
+  depends_on = [google_project_service.services]
 }
 
 resource "google_monitoring_alert_policy" "critical_finding" {
@@ -571,9 +685,12 @@ resource "google_monitoring_alert_policy" "function_error_rate" {
       duration        = "0s"
       comparison      = "COMPARISON_GT"
       threshold_value = 0.05
+      # ALIGN_FRACTION_TRUE only applies to BOOL metrics. execution_count is
+      # DELTA/INT64, so the numerator must use the same aligner as the
+      # denominator below; the ratio of the two rates is the error fraction.
       aggregations {
         alignment_period   = "300s"
-        per_series_aligner = "ALIGN_FRACTION_TRUE"
+        per_series_aligner = "ALIGN_RATE"
       }
       denominator_filter = "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_count\""
       denominator_aggregations {
@@ -599,6 +716,8 @@ resource "google_monitoring_notification_channel" "email" {
   labels = {
     email_address = var.alert_email
   }
+
+  depends_on = [google_project_service.services]
 }
 
 #-------------------------------------------------------------------------------
@@ -609,6 +728,15 @@ resource "google_project_service" "services" {
     "securitycenter.googleapis.com",
     "pubsub.googleapis.com",
     "cloudfunctions.googleapis.com",
+    # Cloud Functions Gen 2 is Cloud Run underneath: the build goes through Cloud
+    # Build into Artifact Registry, the function runs as a Cloud Run service, and
+    # the Pub/Sub trigger is an Eventarc trigger. Enabling cloudfunctions alone
+    # leaves all four off on a fresh project. GCP sometimes pulls them in as
+    # dependencies; that is not a contract, so they are declared.
+    "run.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "eventarc.googleapis.com",
     "secretmanager.googleapis.com",
     "firestore.googleapis.com",
     "bigquery.googleapis.com",
@@ -629,7 +757,10 @@ resource "google_project_service" "services" {
 
 #-------------------------------------------------------------------------------
 # Data sources
+#
+# google_project was removed with the SCC publisher binding above: the project
+# number was used only to interpolate that service agent address, and an
+# interpolated principal cannot be validated before apply. Service agents that
+# are genuinely needed are declared as google_project_service_identity or read
+# through a typed data source instead.
 #-------------------------------------------------------------------------------
-data "google_project" "project" {
-  project_id = var.project_id
-}

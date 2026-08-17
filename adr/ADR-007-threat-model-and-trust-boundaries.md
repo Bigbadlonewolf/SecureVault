@@ -13,9 +13,9 @@ A detection and response pipeline is an attractive target: if an attacker can in
 
 Adopt the following trust-boundary design:
 
-1. **SCC control plane → Pub/Sub:** Only the SCC notification service account may publish to `scc-findings`.
+1. **SCC control plane → Pub/Sub:** The design restricts publishing to the SCC notification service account. **This is not deployed.** That service agent exists only once an SCC notification config is created, which requires Security Command Center Premium; on a Standard-tier project the binding fails at apply and was removed from `terraform/` on 2026-08-17. The topic has no explicit publisher binding today, so the alternative this ADR rejected below ("No Pub/Sub IAM restriction") is in effect the deployed state. Restore both together if Premium is enabled.
 2. **Pub/Sub → Cloud Function:** The function runs under a dedicated service account (`scc-processor`) with no project-level Editor/Owner roles.
-3. **Function → GCP APIs:** The function uses a custom IAM role (`securevault.remediator`) scoped to remediation-adjacent permissions. Only two are currently exercised (`PUBLIC_BUCKET_ACL`, `OPEN_FIREWALL`); permissions for a third, excluded handler remain provisioned as documented technical debt (see ADR-004, `context/THREAT_MODEL.md`).
+3. **Function → GCP APIs:** The function uses a custom IAM role (`securevault.remediator`) scoped to remediation-adjacent permissions. The two exercised handlers (`PUBLIC_BUCKET_ACL`, `OPEN_FIREWALL`) account for every write permission in the role. The `setIamPolicy` permissions once provisioned for the excluded third handler were revoked once that handler was deleted, closing the technical debt this ADR previously recorded (see ADR-004, `context/THREAT_MODEL.md`).
 4. **Function → secrets:** The function may access only the single Secret Manager secret for the Brevo API key.
 5. **Function → alerting:** External alerting uses HTTPS to Brevo; failures are logged locally.
 

@@ -19,9 +19,15 @@ variable "firestore_location" {
 }
 
 variable "bigquery_location" {
-  description = "BigQuery dataset location"
+  # Must match the location of the CMEK key in google_kms_crypto_key.securevault,
+  # which lives in var.region. A multi-region value such as "US" is rejected at
+  # apply against a regional key: "The location for the specified Cloud KMS key
+  # is us-central1. This location is not supported for the BigQuery dataset
+  # location US." Changing this to a multi-region requires a second key ring in
+  # the matching multi-region, and KMS key rings can never be deleted.
+  description = "BigQuery dataset location. Must match the CMEK key location (var.region)."
   type        = string
-  default     = "US"
+  default     = "us-central1"
 }
 
 variable "alert_email" {
