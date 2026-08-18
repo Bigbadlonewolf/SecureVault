@@ -249,7 +249,12 @@ resource "google_secret_manager_secret_iam_member" "function_brevo_accessor" {
 # Cost: ~$0.020/GB/month; source zip is <1 MB.
 #-------------------------------------------------------------------------------
 resource "google_storage_bucket" "source_logs" {
-  #checkov:skip=CKV_GCP_62:This bucket is the access-log destination; requiring it to log itself would create an infinite loop.
+  # Retained but no longer written to. It was the destination for legacy GCS
+  # access logs; that mechanism was dropped because Domain Restricted Sharing
+  # blocks the required cloud-storage-analytics grant (see below). Kept rather
+  # than destroyed so the change is non-destructive; remove it deliberately if
+  # the empty bucket is not wanted.
+  #checkov:skip=CKV_GCP_62:Empty retained bucket with no writers; self-logging would serve no purpose.
   name          = "${var.project_id}-securevault-source-logs"
   location      = var.region
   force_destroy = true
@@ -273,15 +278,22 @@ resource "google_storage_bucket" "source_logs" {
   ]
 }
 
-# Cloud Storage access logs are written by Google's analytics service account.
-resource "google_storage_bucket_iam_member" "source_logs_analytics_writer" {
-  bucket = google_storage_bucket.source_logs.name
-  role   = "roles/storage.legacyBucketWriter"
-  # cloud-storage-analytics@google.com is a Google group, not a service account.
-  # The serviceAccount: prefix is rejected at apply with "was marked as a
-  # serviceAccount but is actually a user, invalid".
-  member = "group:cloud-storage-analytics@google.com"
-}
+# Deliberate absence: no legacy GCS access logging, and no
+# cloud-storage-analytics@google.com grant.
+#
+# GCS access-log delivery requires granting roles/storage.legacyBucketWriter to
+# the Google-owned group cloud-storage-analytics@google.com on the destination
+# bucket. That principal is outside this Cloud Identity customer, so the
+# organization's Domain Restricted Sharing constraint
+# (constraints/iam.allowedPolicyMemberDomains) refuses the binding at apply with
+# "One or more users named in the policy do not belong to a permitted customer".
+# Granting an org-wide DRS exception for one legacy log mechanism is a worse
+# trade than dropping the mechanism.
+#
+# Cloud Audit Logs data-access logging replaces it — see
+# google_project_iam_audit_config below. That is the current mechanism, needs no
+# cross-customer grant, and covers Secret Manager and KMS as well as Storage,
+# which legacy bucket logs never did.
 
 resource "google_storage_bucket" "source" {
   name          = "${var.project_id}-securevault-source"
@@ -299,16 +311,17 @@ resource "google_storage_bucket" "source" {
     default_kms_key_name = google_kms_crypto_key.securevault.id
   }
 
-  logging {
-    log_bucket        = google_storage_bucket.source_logs.name
-    log_object_prefix = "access-logs/"
-  }
+  # No logging{} block. Access-log delivery to source_logs would require the
+  # cloud-storage-analytics grant that Domain Restricted Sharing forbids (see
+  # above). Configuring logging{} without that grant produces a bucket that
+  # claims to ship access logs and silently never does, which is worse than not
+  # configuring it. Read access to this bucket is captured by the DATA_READ
+  # audit config on storage.googleapis.com instead.
 
   labels = local.common_labels
 
   depends_on = [
     google_kms_crypto_key_iam_member.storage_encrypt_decrypt,
-    google_storage_bucket_iam_member.source_logs_analytics_writer,
     google_project_service.services,
   ]
 }
@@ -715,6 +728,70 @@ resource "google_monitoring_notification_channel" "email" {
   type         = "email"
   labels = {
     email_address = var.alert_email
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+#-------------------------------------------------------------------------------
+# Cloud Audit Logs: data-access logging
+#
+# Admin Activity logs are always on and free. Data-access logs (DATA_READ /
+# DATA_WRITE) are off by default on every GCP project, and this project's
+# auditConfigs was empty before these blocks existed. THREAT_MODEL.md and
+# ADR-007 both asserted that Secret Manager access and API calls were covered by
+# Cloud Audit Logs; without these, that was false.
+#
+# Scoped to three services rather than allServices on purpose: data-access logs
+# bill by volume, and these are the three that hold or gate the sensitive
+# material. Storage covers the source bucket, replacing the legacy access logs
+# that Domain Restricted Sharing blocked. Secret Manager covers reads of the
+# Brevo API key. KMS covers every encrypt/decrypt against the CMEK, which is what
+# makes the "revoke the key grant as a kill switch" claim auditable.
+#
+# google_project_iam_audit_config is authoritative per service: it replaces the
+# audit config for the named service rather than merging into it.
+#-------------------------------------------------------------------------------
+resource "google_project_iam_audit_config" "storage" {
+  project = var.project_id
+  service = "storage.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_WRITE"
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_project_iam_audit_config" "secretmanager" {
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_WRITE"
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_project_iam_audit_config" "cloudkms" {
+  project = var.project_id
+  service = "cloudkms.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_WRITE"
   }
 
   depends_on = [google_project_service.services]

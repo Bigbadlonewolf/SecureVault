@@ -25,7 +25,7 @@ Adopt the following trust-boundary design:
 
 - Compromise of the function service account cannot grant project ownership.
 - A poisoned finding cannot trigger destructive actions outside the mapped classes.
-- Cloud Audit Logs provide tamper-evident evidence of every IAM and API call.
+- Cloud Audit Logs provide tamper-evident evidence of IAM changes and of data access to Secret Manager, KMS, and Storage. Admin Activity logging is always on; data-access logging is **not** on by default and was enabled explicitly via `google_project_iam_audit_config` on 2026-08-17. Scoped to those three services, so this is not evidence of "every API call" — an earlier version of this ADR claimed that and was wrong.
 
 **Negative:**
 

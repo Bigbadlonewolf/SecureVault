@@ -151,7 +151,7 @@ flowchart LR
 - Secrets are never stored in source code, environment variables, or Terraform state.
 - The secret is encrypted with the project CMEK (`securevault-key`), not a Google-managed key. This requires a user-managed replication policy pinned to `var.region`, because CMEK under an automatic policy needs a key in the `global` KMS location and `securevault-keyring` is regional. Revoking the Secret Manager service agent's access to the key renders the secret unreadable — a kill switch that Google-managed encryption does not provide.
 - The function service account holds only `roles/secretmanager.secretAccessor` for the single Brevo secret.
-- Secret Manager access is logged in Cloud Audit Logs.
+- Secret Manager access is logged in Cloud Audit Logs. This is **not** the default: data-access logs are off on every new GCP project, and this claim was false until `google_project_iam_audit_config` was added on 2026-08-17. `DATA_READ` and `DATA_WRITE` are now enabled for `secretmanager.googleapis.com`, `cloudkms.googleapis.com`, and `storage.googleapis.com` — scoped to those three rather than `allServices`, because data-access logs bill by volume.
 - The placeholder secret version created by Terraform is disabled and intended to be replaced via `gcloud` or the console.
 
 ## Risk Summary
