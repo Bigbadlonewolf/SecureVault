@@ -141,7 +141,7 @@ At 10,000 findings/month with an average execution time of **2 seconds**, the wo
 
 > **Cost model update (v0.1.2):** The hardening pass added VPC, Cloud NAT, Cloud KMS, access logging, and additional monitoring. These controls intentionally exceed the original under-\$5 demo target in favor of production-grade security. The `$20/month` ceiling and billing alert at `$15/month` remain in place.
 >
-> **Superseded by [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md).** The VPC, Serverless VPC Access connector, Cloud Router, and Cloud NAT are gone. A cost trace found the VPC held no resources and its subnet was orphaned. The connector could not scale to zero either: `min_throughput = 200` forces a floor of 2 e2-micro instances no matter what `min_instances` is set to. Its only job was routing egress to `api.brevo.com`, which authenticates by API key rather than source IP. Removing it cut roughly \$14 to \$47 per month of idle compute and put the project back under the \$5 target. Cloud KMS, access logging, and the monitoring alerts stay.
+> **Superseded by [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md).** The VPC, Serverless VPC Access connector, Cloud Router, and Cloud NAT are gone. A cost trace found the VPC held no resources and its subnet was orphaned. The connector could not scale to zero either: `min_throughput = 200` forces a floor of 2 e2-micro instances no matter what `min_instances` is set to. Its only job was routing egress to `api.brevo.com`, which authenticates by API key rather than source IP. Removing it cut roughly \$14 to \$47 per month of idle compute and put the project back under the \$5 target. Cloud KMS and the monitoring alerts stay. GCS bucket access logging does not — see the audit-logging note below.
 
 ---
 
@@ -186,9 +186,9 @@ See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for a fresh-GCP-proje
 
 - **No secrets are stored in source code.** Sensitive values live in Secret Manager.
 - **Least-privilege IAM.** The Cloud Function runs under a dedicated service account with a custom remediation role.
-- **Publisher-restricted Pub/Sub topic.** Only the SCC notification service account can publish to `scc-findings`.
-- **All source passes** `bandit`, `pip-audit`, `Checkov` (62 passed, 0 failed, 1 documented skip), and `truffleHog` scans in CI. See `CHECKOV_SKIP.md` for the single intentional skip.
-- **Production hardening in the Terraform baseline:** CMEK via Cloud KMS, access logging, deletion protection, secret environment variables, and ingress restricted to internal-only. The VPC and Cloud NAT added in the same pass were later removed once a cost trace of the plan showed they would carry no traffic worth controlling. See [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md).
+- **The Pub/Sub topic is not publisher-restricted.** The intended design grants `roles/pubsub.publisher` only to the SCC notification service agent, but that agent is minted only when an SCC notification config exists, which needs SCC Premium. On a Standard-tier project the binding fails at apply, so it was removed. Publishing is bounded only by project-level `pubsub.publisher`. See `context/THREAT_MODEL.md` — this is why poisoned-finding injection carries a Medium residual, not Low.
+- **All source passes** `bandit`, `pip-audit`, `Checkov` (49 passed, 0 failed, 2 documented skips), and `truffleHog` scans in CI. See `CHECKOV_SKIP.md` for both skips.
+- **Production hardening in the Terraform baseline:** CMEK via Cloud KMS, Cloud Audit Logs data-access logging on Storage/Secret Manager/KMS, deletion protection, secret environment variables, and ingress restricted to internal-only. The VPC and Cloud NAT added in the same pass were later removed once a cost trace of the plan showed they would carry no traffic worth controlling. See [ADR-009](adr/ADR-009-remove-vpc-connector-and-nat.md). GCS bucket access logging was dropped: delivery needs a grant to `cloud-storage-analytics@google.com`, which Domain Restricted Sharing refuses at apply. The audit config replaces it and covers more.
 
 ### Known Risks in v0.1.0
 

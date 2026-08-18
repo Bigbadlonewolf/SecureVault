@@ -142,6 +142,9 @@ terraform apply
 | `google_bigquery_dataset.analytics` + `findings_history` | Historical analytics and audit |
 | `google_monitoring_dashboard.securevault` | Operational dashboard |
 | `google_monitoring_alert_policy.function_error_rate` | Alerts when function error rate > 5% |
+| `google_project_iam_audit_config` × 3 | Data-access logging for Storage, Secret Manager and KMS |
+
+> **Read this before applying to a project you did not create.** `google_project_iam_audit_config` is **authoritative per service**: it replaces that service's audit configuration rather than merging into it. If the target project already has data-access logging configured for `storage.googleapis.com`, `secretmanager.googleapis.com` or `cloudkms.googleapis.com`, applying this will overwrite it, and the plan will show the removal. Check `gcloud projects get-iam-policy $PROJECT_ID --format='yaml(auditConfigs)'` first. On a project with no existing audit config — the case this was built against — there is nothing to lose.
 
 Review the Terraform outputs for useful resource names:
 
