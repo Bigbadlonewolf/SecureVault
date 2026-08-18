@@ -296,6 +296,7 @@ resource "google_storage_bucket" "source_logs" {
 # which legacy bucket logs never did.
 
 resource "google_storage_bucket" "source" {
+  #checkov:skip=CKV_GCP_62:Legacy bucket-log delivery is unreachable here — it needs a roles/storage.legacyBucketWriter grant to cloud-storage-analytics@google.com, which Domain Restricted Sharing refuses at apply. Compensating control is the DATA_READ/DATA_WRITE audit config on storage.googleapis.com in this same file, which covers this bucket and is not skippable by an attacker who can edit bucket metadata.
   name          = "${var.project_id}-securevault-source"
   location      = var.region
   force_destroy = true
