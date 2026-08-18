@@ -8,6 +8,7 @@ terraform/.terraform.lock.hcl
 terraform/crash.log
 terraform/crash.*.log
 terraform/*.plan
+terraform/*.tfplan
 
 # Python
 __pycache__/
