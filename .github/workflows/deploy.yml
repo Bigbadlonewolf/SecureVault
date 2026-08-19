@@ -63,7 +63,9 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.5.7'
+          # Must be >= the version that wrote terraform.tfstate (1.15.7).
+          # Terraform refuses to read a state snapshot written by a newer version.
+          terraform_version: '1.15.7'
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
@@ -74,19 +76,13 @@ jobs:
         working-directory: terraform
         run: terraform init
 
+      # Terraform owns google_cloudfunctions2_function.scc_processor outright.
+      # There is deliberately no follow-up `gcloud functions deploy` step: it
+      # would redeploy the same function imperatively, outside state, dropping
+      # every setting Terraform sets (secret env vars, ingress restriction,
+      # memory, timeout, retry policy).
       - name: Terraform Apply
         working-directory: terraform
         run: terraform apply -auto-approve -input=false
         env:
           TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
-
-      - name: Deploy Cloud Function
-        run: |
-          gcloud functions deploy scc-processor \
-            --gen2 \
-            --runtime=python311 \
-            --source=src \
-            --entry-point=scc_processor.main.process_scc_finding \
-            --trigger-topic=scc-findings \
-            --service-account=scc-processor@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
-            --region=${{ vars.GCP_REGION }}

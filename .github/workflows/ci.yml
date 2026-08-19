@@ -96,7 +96,9 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.5.7'
+          # Must be >= the version that wrote terraform.tfstate (1.15.7).
+          # Terraform refuses to read a state snapshot written by a newer version.
+          terraform_version: '1.15.7'
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2

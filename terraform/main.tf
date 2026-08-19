@@ -184,6 +184,23 @@ resource "google_service_account" "cloud_build" {
 }
 
 #-------------------------------------------------------------------------------
+# Service account for the Eventarc trigger
+# Same failure mode as the build identity above: an Eventarc trigger with no
+# service_account_email is created as the default compute SA, which holds no
+# roles under constraints/iam.automaticIamGrantsForDefaultServiceAccounts. It
+# can neither receive events nor invoke the function, so findings are delivered,
+# rejected 403, and retried indefinitely.
+#-------------------------------------------------------------------------------
+resource "google_service_account" "eventarc" {
+  # Cost: free
+  account_id   = "securevault-eventarc"
+  display_name = "SecureVault Eventarc trigger identity"
+  description  = "Delivery identity for the scc-findings trigger; invokes the function only"
+
+  depends_on = [google_project_service.services]
+}
+
+#-------------------------------------------------------------------------------
 # Pub/Sub topic for SCC findings
 # Cost: first 10 GiB/month free, then ~$40/TiB; 1-day retention keeps cost low.
 #-------------------------------------------------------------------------------
@@ -345,7 +362,9 @@ resource "google_storage_bucket" "source" {
 
 #-------------------------------------------------------------------------------
 # Cloud Function Gen 2
-# Cost: free tier 2M invocations/month; 256 MB keeps memory charge low.
+# Cost: free tier 2M invocations/month and 400k GB-seconds. At 512 MB and a
+# sub-second SCC finding, the free GB-second allowance still covers well over
+# 100k invocations/month, so this is not a meaningful cost change.
 #-------------------------------------------------------------------------------
 data "archive_file" "function_source" {
   type        = "zip"
@@ -379,7 +398,10 @@ resource "google_cloudfunctions2_function" "scc_processor" {
   }
 
   service_config {
-    available_memory      = "256M"
+    # 256M (244 MiB usable) is not enough: importing the storage, firestore,
+    # bigquery, secretmanager and pubsub clients alone reaches 315 MiB and the
+    # instance is killed before handling a single event.
+    available_memory      = "512M"
     timeout_seconds       = 60
     max_instance_count    = 10
     min_instance_count    = 0
@@ -408,7 +430,10 @@ resource "google_cloudfunctions2_function" "scc_processor" {
     event_type     = "google.cloud.pubsub.topic.v1.messagePublished"
     pubsub_topic   = google_pubsub_topic.scc_findings.id
     retry_policy   = "RETRY_POLICY_RETRY"
-    # service_account_email intentionally omitted; Eventarc uses its own managed identity.
+    # Omitting this does NOT fall back to a managed Eventarc identity: the trigger
+    # is created as the default compute SA, which holds no roles here, so every
+    # delivery is rejected 403 by Cloud Run and retried forever.
+    service_account_email = google_service_account.eventarc.email
   }
 
   labels = local.common_labels
@@ -549,6 +574,25 @@ resource "google_project_iam_member" "build_source_reader" {
   project = var.project_id
   role    = "roles/storage.objectViewer"
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+#-------------------------------------------------------------------------------
+# Eventarc trigger identity roles
+# Receive the Pub/Sub event, then invoke this one function. Nothing else.
+#-------------------------------------------------------------------------------
+resource "google_project_iam_member" "eventarc_event_receiver" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.eventarc.email}"
+}
+
+# Scoped to the single Cloud Run service backing the function, not the project.
+# Referencing the function here (not the reverse) keeps the dependency acyclic.
+resource "google_cloud_run_service_iam_member" "eventarc_invoker" {
+  location = google_cloudfunctions2_function.scc_processor.location
+  service  = google_cloudfunctions2_function.scc_processor.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.eventarc.email}"
 }
 
 #-------------------------------------------------------------------------------
