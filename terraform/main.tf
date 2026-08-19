@@ -168,6 +168,22 @@ resource "google_service_account" "scc_processor" {
 }
 
 #-------------------------------------------------------------------------------
+# Service account for the Cloud Function build (Gen 2 / Cloud Build)
+# Gen 2 defaults the build identity to the project's default *compute* SA. Under
+# constraints/iam.automaticIamGrantsForDefaultServiceAccounts that account has no
+# roles, so the build fails with a permissions error. A dedicated identity avoids
+# re-privileging the shared default compute SA to fix it.
+#-------------------------------------------------------------------------------
+resource "google_service_account" "cloud_build" {
+  # Cost: free
+  account_id   = "securevault-build"
+  display_name = "SecureVault Cloud Function build identity"
+  description  = "Build-time identity for the scc-processor Cloud Function; no runtime access"
+
+  depends_on = [google_project_service.services]
+}
+
+#-------------------------------------------------------------------------------
 # Pub/Sub topic for SCC findings
 # Cost: first 10 GiB/month free, then ~$40/TiB; 1-day retention keeps cost low.
 #-------------------------------------------------------------------------------
@@ -351,6 +367,9 @@ resource "google_cloudfunctions2_function" "scc_processor" {
   build_config {
     runtime     = "python311"
     entry_point = "process_scc_finding"
+    # Build identity. Without this the build runs as the default compute SA,
+    # which holds no roles in this project and fails.
+    service_account = google_service_account.cloud_build.id
     source {
       storage_source {
         bucket = google_storage_bucket.source.name
@@ -397,6 +416,11 @@ resource "google_cloudfunctions2_function" "scc_processor" {
   depends_on = [
     google_secret_manager_secret_iam_member.function_brevo_accessor,
     google_project_service.services,
+    # The build SA's grants have no reference edge to this resource; without
+    # these the build can start before the roles land and fail.
+    google_project_iam_member.build_log_writer,
+    google_project_iam_member.build_artifact_writer,
+    google_project_iam_member.build_source_reader,
   ]
 }
 
@@ -500,6 +524,31 @@ resource "google_project_iam_member" "function_metric_writer" {
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
   member  = "serviceAccount:${google_service_account.scc_processor.email}"
+}
+
+#-------------------------------------------------------------------------------
+# Build service account roles
+# The three roles Google documents as the minimum for a user-managed Gen 2 build
+# identity. Build-time only: this SA never runs the function.
+#-------------------------------------------------------------------------------
+resource "google_project_iam_member" "build_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Push the built container image to the gcf-artifacts repository.
+resource "google_project_iam_member" "build_artifact_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
+# Read the function source zip from the staging bucket.
+resource "google_project_iam_member" "build_source_reader" {
+  project = var.project_id
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 #-------------------------------------------------------------------------------
