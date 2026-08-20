@@ -616,6 +616,7 @@ resource "google_project_iam_custom_role" "remediation" {
     # Compute: disable open firewall rules
     "compute.firewalls.get",
     "compute.firewalls.update",
+    "compute.networks.updatePolicy",
     # IAM: read-only. The two setIamPolicy permissions that used to sit here were
     # provisioned for remove_excess_service_account_roles, the OVER_PRIVILEGED_SA
     # handler that ADR-004 excluded and v0.1.4 deleted (EVOLUTION.md). THREAT_MODEL.md
