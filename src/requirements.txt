@@ -7,6 +7,8 @@ google-cloud-compute>=1.14.0
 google-cloud-resource-manager>=1.10.0
 google-cloud-firestore>=2.11.0
 google-cloud-bigquery>=3.11.0
-google-cloud-logging>=3.8.0
+# google-cloud-logging is deliberately absent: the runtime parses single-line
+# JSON on stdout into jsonPayload, and its handler discarded our extra fields.
+# See scc_processor/utils/logger.py.
 PyYAML>=6.0
 requests>=2.31.0
