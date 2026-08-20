@@ -89,13 +89,20 @@ jobs:
 
       # Federation is configured by repository variables, not secrets: the
       # provider only accepts tokens from this repository, so neither value is
-      # sensitive. Pull requests from forks receive no id-token, so the plan is
-      # skipped there rather than failing.
+      # sensitive.
+      #
+      # Credentials are requested only for pushes to main. The trust policy in
+      # terraform/wif.tf deliberately does not admit pull_request subs: for a
+      # same-repository PR, GitHub runs the workflow file as it exists on the
+      # PR head, so a federated PR job would let anyone who can open a PR
+      # rewrite this file and read the deployer's token. Plans on pull requests
+      # therefore run unauthenticated, and fmt/validate still give real signal.
       - name: Check for GCP credentials
         id: gcp_creds
         run: |
           if [ -n "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] \
-             && [ "${{ github.event.pull_request.head.repo.fork }}" != "true" ]; then
+             && [ "${{ github.event_name }}" = "push" ] \
+             && [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -170,6 +177,6 @@ jobs:
           if [ "${{ steps.gcp_creds.outputs.available }}" = "true" ]; then
             echo "Workload Identity Federation configured; terraform plan ran (or attempted to run)."
           else
-            echo "No federated credentials for this event (unset GCP_WORKLOAD_IDENTITY_PROVIDER, or a fork PR)."
+            echo "No federated credentials for this event (not a push to main, or GCP_WORKLOAD_IDENTITY_PROVIDER unset)."
             echo "Skipped terraform plan; fmt, init -backend=false and validate still ran."
           fi
