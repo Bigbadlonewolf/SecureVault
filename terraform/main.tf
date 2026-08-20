@@ -604,8 +604,14 @@ resource "google_project_iam_custom_role" "remediation" {
   description = "Minimal permissions for SecureVault critical-finding auto-remediation"
 
   permissions = [
-    # Storage: remove allUsers/allAuthenticatedUsers from bucket IAM
+    # Storage: remove allUsers/allAuthenticatedUsers from bucket IAM.
+    # remove_public_bucket_access is a read-modify-write, so it needs
+    # getIamPolicy as well as setIamPolicy. storage.buckets.get is a different
+    # permission and does not cover reading the IAM policy: without the line
+    # below the handler 403s on bucket.get_iam_policy() and never reaches the
+    # write it is already allowed to perform.
     "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
     "storage.buckets.setIamPolicy",
     # Compute: disable open firewall rules
     "compute.firewalls.get",
