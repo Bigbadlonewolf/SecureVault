@@ -15,6 +15,9 @@ from scc_processor.utils.logger import get_logger
 
 _logger = get_logger()
 
+# Prefix of a Brevo SMTP relay key, which the v3 REST API does not accept.
+_SMTP_KEY_PREFIX = "xsmtpsib-"
+
 
 def send_alert(finding: Dict[str, Any], action_result: Dict[str, Any]) -> bool:
     """Send a Brevo email alert for a finding.
@@ -110,8 +113,28 @@ This alert was generated automatically by SecureVault.
 
 
 def _get_brevo_api_key() -> str:
-    """Return the Brevo API key injected by Cloud Functions secret_environment_variables."""
-    api_key = os.environ.get("BREVO_API_KEY", "")
+    """Return the Brevo API key injected by Cloud Functions secret_environment_variables.
+
+    Secret Manager stores a payload byte for byte, so a version added with
+    ``echo`` rather than ``printf '%s'`` carries a trailing newline. Brevo
+    rejects the resulting api-key header with a 401 that is indistinguishable
+    from a revoked key, so the value is stripped before use.
+    """
+    api_key = os.environ.get("BREVO_API_KEY", "").strip()
     if not api_key:
         _logger.error("BREVO_API_KEY environment variable is not set")
+        return ""
+
+    # Brevo issues two unrelated credentials. SMTP relay keys (xsmtpsib-)
+    # authenticate against smtp-relay.brevo.com; the v3 REST endpoint used here
+    # accepts only API keys (xkeysib-) and answers anything else with a bare
+    # 401, indistinguishable from a revoked key.
+    if api_key.startswith(_SMTP_KEY_PREFIX):
+        _logger.error(
+            "BREVO_API_KEY holds an SMTP relay key, not a v3 API key. The REST "
+            "endpoint rejects it with 401. Generate an API key under "
+            "Brevo > SMTP & API > API Keys and store that instead."
+        )
+        return ""
+
     return api_key
