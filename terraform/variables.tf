@@ -63,6 +63,27 @@ variable "github_repository" {
   }
 }
 
+variable "github_repository_id" {
+  description = <<-EOT
+    Immutable numeric ID of the GitHub repository allowed to federate.
+    Repository names can be renamed or deleted and re-registered by someone
+    else, so a name-only trust condition can be inherited by a stranger. The
+    numeric ID cannot be reused. Find it with:
+      gh api repos/<owner>/<name> --jq .id
+  EOT
+  type        = string
+  default     = "1284525416"
+}
+
+variable "github_repository_owner_id" {
+  description = <<-EOT
+    Immutable numeric ID of the GitHub account that owns the repository.
+    Find it with: gh api users/<owner> --jq .id
+  EOT
+  type        = string
+  default     = "153934631"
+}
+
 variable "deployer_service_account_id" {
   description = "Account ID of the existing service account that GitHub Actions impersonates to run Terraform"
   type        = string

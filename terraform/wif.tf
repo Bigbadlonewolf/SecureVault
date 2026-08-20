@@ -66,11 +66,23 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_provider_id = "github"
   display_name                       = "GitHub OIDC"
 
-  # Without an attribute_condition this provider would accept a token from any
-  # workflow in any repository on GitHub. The condition is the perimeter, and
-  # it is an exact match on the full owner/name -- a prefix or suffix match
-  # would admit a lookalike repository created by anyone.
-  attribute_condition = "assertion.repository == \"${var.github_repository}\""
+  # This condition is the entire perimeter. Without it the provider accepts a
+  # token from any workflow in any repository on GitHub.
+  #
+  # It pins the immutable numeric IDs, not just the name, which is what
+  # CKV_GCP_125 asks for and the reason is not academic: GitHub repository and
+  # account names are re-usable. Rename or delete this repo and the string
+  # "Bigbadlonewolf/SecureVault" becomes claimable by a stranger, who would
+  # then satisfy a name-only condition and be able to impersonate the deployer.
+  # Numeric IDs are never reissued.
+  #
+  # The name check is kept alongside them because it is the part a human can
+  # read and verify; the IDs are the part that actually holds.
+  attribute_condition = join(" && ", [
+    "assertion.repository == \"${var.github_repository}\"",
+    "assertion.repository_id == \"${var.github_repository_id}\"",
+    "assertion.repository_owner_id == \"${var.github_repository_owner_id}\"",
+  ])
 
   attribute_mapping = {
     "google.subject"             = "assertion.sub"

@@ -96,4 +96,8 @@ jobs:
         working-directory: terraform
         run: terraform apply -auto-approve -input=false
         env:
+          # terraform.tfvars is gitignored, so the two variables without
+          # defaults have to be supplied here or the run fails at plan time
+          # with "No value for required variable".
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
           TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
