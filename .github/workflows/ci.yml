@@ -80,14 +80,22 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      # Required to mint the OIDC token that Workload Identity Federation
+      # exchanges for GCP credentials. Without it the auth step fails.
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
 
+      # Federation is configured by repository variables, not secrets: the
+      # provider only accepts tokens from this repository, so neither value is
+      # sensitive. Pull requests from forks receive no id-token, so the plan is
+      # skipped there rather than failing.
       - name: Check for GCP credentials
         id: gcp_creds
         run: |
-          if [ -n "${{ secrets.GCP_TERRAFORM_SA_KEY }}" ]; then
+          if [ -n "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] \
+             && [ "${{ github.event.pull_request.head.repo.fork }}" != "true" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -104,15 +112,24 @@ jobs:
         uses: google-github-actions/auth@v2
         if: steps.gcp_creds.outputs.available == 'true'
         with:
-          credentials_json: ${{ secrets.GCP_TERRAFORM_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
 
       - name: Terraform Format Check
         working-directory: terraform
         run: terraform fmt -check -recursive
 
+      # State is in GCS, so a plain init needs credentials. When they are not
+      # available -- a fork PR -- init runs without the backend so that fmt and
+      # validate still provide real signal instead of erroring out.
       - name: Terraform Init
         working-directory: terraform
-        run: terraform init
+        run: |
+          if [ "${{ steps.gcp_creds.outputs.available }}" = "true" ]; then
+            terraform init
+          else
+            terraform init -backend=false
+          fi
 
       - name: Terraform Validate
         working-directory: terraform
@@ -147,7 +164,8 @@ jobs:
         if: always()
         run: |
           if [ "${{ steps.gcp_creds.outputs.available }}" = "true" ]; then
-            echo "GCP_TERRAFORM_SA_KEY is configured; terraform plan ran (or attempted to run)."
+            echo "Workload Identity Federation configured; terraform plan ran (or attempted to run)."
           else
-            echo "GCP_TERRAFORM_SA_KEY not configured; skipped terraform plan (fmt/init/validate still ran)."
+            echo "No federated credentials for this event (unset GCP_WORKLOAD_IDENTITY_PROVIDER, or a fork PR)."
+            echo "Skipped terraform plan; fmt, init -backend=false and validate still ran."
           fi

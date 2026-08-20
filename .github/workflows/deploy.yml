@@ -67,11 +67,22 @@ jobs:
           # Terraform refuses to read a state snapshot written by a newer version.
           terraform_version: '1.15.7'
 
+      # Workload Identity Federation, not a service account key. GitHub mints a
+      # short-lived OIDC token for this job, STS exchanges it, and IAM
+      # Credentials issues an access token for the deployer. Nothing long-lived
+      # is stored in the repository. The provider only accepts tokens whose
+      # assertion.repository matches this repo exactly (terraform/wif.tf), so
+      # these two values are configuration, not secrets, and are held as
+      # repository variables.
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_TERRAFORM_SA_KEY }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
 
+      # State lives in GCS (terraform/backend.tf). Without a remote backend a
+      # fresh runner would start empty and try to create resources that already
+      # exist, which is why this job could not have worked before.
       - name: Terraform Init
         working-directory: terraform
         run: terraform init

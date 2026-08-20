@@ -47,3 +47,25 @@ variable "kms_key_rotation_period" {
   default     = "7776000s"
 }
 
+variable "github_repository" {
+  description = <<-EOT
+    GitHub repository allowed to federate into the deployer service account,
+    as "owner/name". This is the only thing standing between the deployer
+    identity and any workflow on GitHub, so it is matched exactly rather than
+    by prefix. Changing it changes who can deploy.
+  EOT
+  type        = string
+  default     = "Bigbadlonewolf/SecureVault"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$", var.github_repository))
+    error_message = "github_repository must be exactly \"owner/name\"."
+  }
+}
+
+variable "deployer_service_account_id" {
+  description = "Account ID of the existing service account that GitHub Actions impersonates to run Terraform"
+  type        = string
+  default     = "securevault-deployer"
+}
+
