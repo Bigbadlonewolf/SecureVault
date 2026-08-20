@@ -21,10 +21,17 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 
-def _sample_finding(finding_class: str, severity: str) -> Dict[str, Any]:
-    """Return a realistic SCC finding payload for the requested class/severity."""
+def _sample_finding(finding_class: str, severity: str, project: str) -> Dict[str, Any]:
+    """Return a realistic SCC finding payload for the requested class/severity.
+
+    Args:
+        finding_class: Internal class name used to select the payload shape.
+        severity: SCC severity to stamp on the finding.
+        project: GCP project ID to embed in the finding name and resourceName.
+            Every resource the remediator acts on is addressed from this value,
+            so it must match the project the finding is published to.
+    """
     now = datetime.now(timezone.utc).isoformat()
-    project = os.environ.get("PROJECT_ID", "unknown-project")
 
     # Real SCC findings set findingClass to a fixed enum (e.g. MISCONFIGURATION)
     # and put the specific detector name in category. Templates below use the
@@ -138,7 +145,7 @@ def main() -> int:
     mapped_classes = {"PUBLIC_BUCKET_ACL", "OPEN_FIREWALL", "OVER_PRIVILEGED_SA"}
     severity = args.severity or ("CRITICAL" if args.finding_class in mapped_classes else "HIGH")
 
-    finding = _sample_finding(args.finding_class.upper(), severity.upper())
+    finding = _sample_finding(args.finding_class.upper(), severity.upper(), args.project)
     print(f"Publishing {finding['category']} ({finding['severity']}) finding to {args.topic}...")
 
     try:
