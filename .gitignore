@@ -58,3 +58,5 @@ Thumbs.db
 raw/
 # Agent workspace artifacts
 trufflehog.zip
+terraform/plan.txt
+terraform/tfplan.binary
