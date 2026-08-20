@@ -60,3 +60,5 @@ raw/
 trufflehog.zip
 terraform/plan.txt
 terraform/tfplan.binary
+terraform/plan.txt
+terraform/tfplan.binary
