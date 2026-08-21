@@ -1,4 +1,4 @@
-"""
+﻿"""
 SecureVault: GCP Security Detection & Response Pipeline
 Architect: Lanre Oluokun | Implementation: AI-assisted
 License: MIT
@@ -33,7 +33,7 @@ def send_alert(finding: Dict[str, Any], action_result: Dict[str, Any]) -> bool:
         config = load_config()
         brevo_config = config.get("brevo", {})
         api_url = brevo_config.get("api_url", "https://api.brevo.com/v3/smtp/email")
-        sender_email = brevo_config.get("sender_email", "securevault@lanreoluokun.com")
+        sender_email = brevo_config.get("sender_email", "securevault@bigbadlonewolf.com")
         sender_name = brevo_config.get("sender_name", "SecureVault Alerts")
 
         alert_email = os.environ.get("ALERT_EMAIL")
