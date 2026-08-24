@@ -40,4 +40,5 @@ Every push is scanned by the unified [`CI`](.github/workflows/ci.yml) workflow:
 - No analyst workflow tiering (single pipeline, no L1/L2/L3).
 - Tested with simulated findings, not production-scale SCC volume.
 
-Each limitation is tracked as a Phase 2 enhancement in [`EVOLUTION.md`](EVOLUTION.md).
+Limitations are tracked either as Phase 2 enhancements in [`EVOLUTION.md`](EVOLUTION.md)
+or as accepted gaps in [`docs/VERIFICATION.md`](docs/VERIFICATION.md).
