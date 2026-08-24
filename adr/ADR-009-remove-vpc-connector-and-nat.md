@@ -2,7 +2,7 @@
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-21
-- **Status:** Accepted
+- **Status:** Accepted — guardrail condition triggered 2026-08-20, see [ADR-010](ADR-010-alerting-source-ip-allowlist.md)
 - **Implementation:** AI-assisted under architect direction
 - **Supersedes:** The v0.1.2 hardening decision recorded in [`context/COST_ANALYSIS.md`](../context/COST_ANALYSIS.md), which added VPC and Cloud NAT. Does not amend [ADR-008](ADR-008-cost-strategy-under-20-usd.md), whose cost targets this decision restores.
 
