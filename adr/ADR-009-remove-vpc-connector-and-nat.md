@@ -46,6 +46,8 @@ The Cloud Function reaches `api.brevo.com` over Google-managed egress.
 Reinstate the connector, Cloud Router, and Cloud NAT if any of the following becomes true:
 
 - **Brevo, or any replacement alerting provider, requires source-IP allowlisting.** Brevo authenticates by API key, not source IP, so this does not currently apply. Confirmed as non-blocking at the time of this decision. Re-check on any provider change.
+
+  > **Correction, 2026-08-20.** The claim above is wrong, and it was never confirmed — it was asserted from Brevo's documented auth model without being tested. Brevo blocks by source IP for API keys independently of key validity, and the setting was already active with zero authorized addresses. This condition triggered on the first live alerting attempt, which returned 401 for three days while the fault was read as a credential problem. Reversal was declined on proportionality grounds; see [ADR-010](ADR-010-alerting-source-ip-allowlist.md).
 - A private resource is introduced that the function must reach — Cloud SQL, Memorystore, an internal load balancer, or a private GKE endpoint.
 - A VPC Service Controls perimeter is established around the project. No `google_access_context_manager_*` resources exist today.
 - A compliance obligation requires a static, attestable egress IP.
@@ -62,7 +64,7 @@ Any of these makes the VPC egress path genuinely load-bearing, and the ~$14–47
 
 **Negative:**
 
-- Loses a stable egress IP. Reversible via the guardrail above.
+- Loses a stable egress IP. Reversible via the guardrail above. **Update, 2026-08-20:** guardrail condition 1 triggered. The reversal was evaluated and declined — the egress path would have carried one allowlist entry for a single outbound HTTPS call at ~$14–47/month. [ADR-010](ADR-010-alerting-source-ip-allowlist.md) records what was done instead and what it costs in posture.
 - Loses "no direct internet egress from compute" as an interview talking point. The honest replacement is stronger: *the egress control was removed because it protected nothing, and here is the trace that showed it.*
 
 **Requires verification at apply time:**
