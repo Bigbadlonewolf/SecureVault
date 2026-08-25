@@ -7,26 +7,34 @@ in this repo is either traceable to an entry here or it is untested.
 
 ### Pipeline, end to end
 
-Last recorded full trace: `make simulate-finding` against
-`securevault-demo`, 2026-08-20.
+Last recorded full trace: `scripts/simulate_finding.py` against
+`securevault-demo`, 2026-08-24, message ID `21082942597874403`,
+revision `scc-processor-00013-mqt`. Every leg passed.
 
-| Step | Result |
-| --- | --- |
-| Pub/Sub receive | OK |
-| Processing finding | OK |
-| Remediation handler | Failed — 404 on `allow-all-ssh`. Expected; the rule does not exist in the project |
-| Brevo alert | Failed — see note below |
-| Firestore action log | OK |
-| BigQuery stream | OK |
-| Processing complete | OK |
+| Step | Result | Evidence |
+| --- | --- | --- |
+| Pub/Sub receive | OK | Log `Received Pub/Sub message`, correlation id `21082942597874403` |
+| Processing finding | OK | Log `Processing finding` |
+| Remediation handler | OK | Log `Disabled open firewall rule`; `gcloud compute firewall-rules describe allow-all-ssh` returns `disabled: True`, `sourceRanges` unchanged at `0.0.0.0/0` |
+| Brevo alert | OK | `/v3/smtp/statistics/events` shows `requests` → `delivered` → `opened`, 18:04 EDT |
+| Firestore action log | OK | Log `Firestore action logged`, status SUCCESS |
+| BigQuery stream | OK | Log `Finding streamed to BigQuery`, table `securevault_analytics.findings_history` |
+| Processing complete | OK | Log `Finding processing complete` |
 
-**The Brevo row is stale and is kept for the trail.** At the time it was
-read as a credential-type fault. The cause was the source-IP allowlist
-([ADR-010](../adr/ADR-010-alerting-source-ip-allowlist.md)), and a
-second fault — a sender domain that did not exist — was fixed
-afterwards in `3c96a47` on 2026-08-21. **No end-to-end run has been
-recorded since that fix.** The six other rows stand as of 2026-08-20;
-the alerting path is unverified against a live deployment.
+Remediation disables the offending rule rather than narrowing it — the
+source range is unchanged after the handler runs. That is the designed
+action, not a partial fix.
+
+To reproduce: create a firewall rule allowing `tcp:22` from `0.0.0.0/0`,
+run `python scripts/simulate_finding.py --project <PROJECT>
+--finding-class OPEN_FIREWALL --severity HIGH`, then check the rule's
+`disabled` field and Brevo's events endpoint.
+
+The 2026-08-20 run of this pipeline failed on the alerting leg. Two
+faults were involved: a source-IP allowlist
+([ADR-010](../adr/ADR-010-alerting-source-ip-allowlist.md)) and a sender
+domain that did not exist, fixed in `3c96a47`. The trace above is the
+first full-path run after both.
 
 ### CI
 
