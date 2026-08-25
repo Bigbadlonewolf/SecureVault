@@ -2,7 +2,7 @@
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
-- **Status:** Accepted
+- **Status:** Partially implemented — boundary 1 not deployed, see Context
 - **Implementation:** AI-assisted under architect direction
 
 ## Context

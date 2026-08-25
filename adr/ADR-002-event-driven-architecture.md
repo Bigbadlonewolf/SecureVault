@@ -2,7 +2,8 @@
 
 - **Decision Owner:** Lanre Oluokun
 - **Date:** 2026-07-03
-- **Status:** Accepted
+- **Status:** Implemented
+- **Evidence:** [docs/VERIFICATION.md](../docs/VERIFICATION.md) — 2026-08-24 end-to-end run
 - **Implementation:** AI-assisted under architect direction
 
 ## Context
